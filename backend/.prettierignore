@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+db
+*.lock
+bun.lock
+package-lock.json
+yarn.lock
+coverage
+.env
+.env.*
+*.log

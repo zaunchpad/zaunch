@@ -1,0 +1,16 @@
+# ZAUNCHPAD - Privacy-First Cross-chain Token Launch Platform
+
+/* TEAM */
+Developer: Zaunchpad
+Contact: support@zaunchpad.com
+Website: https://www.zaunchpad.com
+Location: Global
+
+/* THANKS */
+Built with ❤️ by the Zaunchpad community
+
+/* SITE */
+Last update: 2024/01/01
+Language: English
+Doctype: HTML5
+IDE: Cursor, VS Code
