@@ -1,0 +1,9 @@
+Contact: support@zaunchpad.com
+Expires: 2025-12-31T23:59:59.000Z
+Preferred-Languages: en
+Canonical: https://www.zaunchpad.com/.well-known/security.txt
+
+# Security Policy
+# We take security and privacy seriously and appreciate responsible disclosure
+# Please report security vulnerabilities to support@zaunchpad.com
+# We will respond within 48 hours and work with you to resolve issues

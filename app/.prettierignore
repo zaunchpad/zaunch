@@ -1,0 +1,16 @@
+node_modules
+.next
+dist
+build
+out
+coverage
+*.log
+.env
+.env.*
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+tsconfig.tsbuildinfo
+public
+*.min.js
+*.min.css
