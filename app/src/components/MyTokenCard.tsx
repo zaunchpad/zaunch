@@ -4,7 +4,6 @@ import type { PublicKey } from '@solana/web3.js';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { getPoolStateByMint } from '@/lib/api';
 import { getTokenBalanceOnSOL } from '@/lib/sol';
 import {
   calculateTokenPrice,
@@ -57,9 +56,7 @@ export function MyTokenCard({
   const fetchTokenPrice = useCallback(async () => {
     try {
       setIsLoadingPrice(true);
-      const poolState = await getPoolStateByMint(mint);
-      const priceData = calculateTokenPrice(poolState, decimals, solPrice);
-      setCurrentPrice(priceData.priceInSol);
+      setCurrentPrice(0);
 
       setPriceChange24h(0);
     } catch (error) {
