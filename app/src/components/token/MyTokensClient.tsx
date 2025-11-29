@@ -15,7 +15,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useOnChainSearch, useUserOnChainTokens } from '@/hooks/useOnChainTokens';
-import { getPoolStateByMint } from '@/lib/api';
 import { getSolPrice, getTokenBalanceOnSOL } from '@/lib/sol';
 import type { Token } from '@/types/api';
 import { calculateTokenPrice, formatNumberToCurrency } from '@/utils';
@@ -143,12 +142,10 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
           const balance = await getTokenBalanceOnSOL(token.mintAddress, publicKey.toBase58());
 
           if (balance > 0) {
-            // Get current price
-            const poolState = await getPoolStateByMint(token.mintAddress);
-            const priceData = calculateTokenPrice(poolState, token.decimals, solPrice);
+
 
             // Calculate value
-            const tokenValue = balance * priceData.priceInUsd;
+            const tokenValue = balance ;
             totalValue += tokenValue;
           }
         } catch (error) {
@@ -341,21 +338,6 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
               <TokenCardSkeleton key={index} />
             ))}
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (displayError) {
-    return (
-      <div className="min-h-screen py-6 md:py-10 bg-black">
-        <div className="max-w-7xl mx-auto px-4">
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2 font-share-tech-mono uppercase">
-            My Portfolio
-          </h1>
-          <p className="text-red-500 mb-8 text-sm md:text-base font-share-tech-mono">
-            {displayError}
-          </p>
         </div>
       </div>
     );
