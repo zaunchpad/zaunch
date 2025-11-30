@@ -3,7 +3,6 @@
 import { X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import ExploreTokenCard from '@/components/ExploreTokenCard';
-import { TAG_ICONS } from '@/components/modal/TagsSelectModal';
 import { NoTokensFound } from '@/components/NoTokensFound';
 import { TokenCardSkeleton } from '@/components/TokenCardSkeleton';
 import { useOnChainSearch } from '@/hooks/useOnChainTokens';
@@ -15,18 +14,8 @@ type Tab = 'LIVE' | 'UPCOMING' | 'ENDED';
 export default function TokenSearch() {
   const [activeTab, setActiveTab] = useState<Tab>('LIVE');
 
-  // Determine active filter for hooks based on tab
-  const activeFilter = useMemo(() => {
-    switch (activeTab) {
-      case 'LIVE':
-        return true;
-      case 'UPCOMING':
-      case 'ENDED':
-        return false;
-      default:
-        return undefined;
-    }
-  }, [activeTab]);
+  // Don't use server-side active filter, do all filtering client-side
+  const activeFilter = undefined;
 
   // Use on-chain search hook
   const {
@@ -34,8 +23,6 @@ export default function TokenSearch() {
     setSearchQuery,
     searchResults,
     isSearching,
-    tag,
-    setTag,
     timeRange,
     setTimeRange,
     clearSearch,
@@ -46,45 +33,85 @@ export default function TokenSearch() {
 
   // Use on-chain tokens hook for default list (when not searching)
   const { tokens: defaultTokens, isLoading: isTokensLoading } = useOnChainTokens({
-    tag,
     startDate: timeRange,
     active: activeFilter,
   });
 
   const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRangeType>('all');
 
-  const filteredDefaultTokens = useMemo(() => {
-    if (activeTab === 'LIVE') return defaultTokens;
+  const getTokenStatus = (token: any): 'upcoming' | 'live' | 'ended' => {
+    if (!token.startTime || !token.endTime) return 'live';
 
-    const now = new Date();
-    return defaultTokens.filter((token) => {
-      // If token status is explicitly set
-      if (token.status) {
-        if (activeTab === 'UPCOMING')
-          return token.status === 'upcoming' || token.status === 'pending';
-        if (activeTab === 'ENDED') return token.status === 'ended' || token.status === 'completed';
+    const now = Date.now();
+
+    // Parse timestamps - they come as BigInt (seconds) or string
+    let startTime: number;
+    let endTime: number;
+
+    if (typeof token.startTime === 'bigint') {
+      startTime = Number(token.startTime) * 1000; // Convert seconds to milliseconds
+    } else if (typeof token.startTime === 'string') {
+      // Check if it's a numeric string or ISO date string
+      const parsed = Number(token.startTime);
+      if (!isNaN(parsed)) {
+        startTime = parsed * 1000; // Unix timestamp in seconds
+      } else {
+        startTime = new Date(token.startTime).getTime(); // ISO string
       }
+    } else {
+      startTime = Number(token.startTime) * 1000;
+    }
 
+    if (typeof token.endTime === 'bigint') {
+      endTime = Number(token.endTime) * 1000; // Convert seconds to milliseconds
+    } else if (typeof token.endTime === 'string') {
+      // Check if it's a numeric string or ISO date string
+      const parsed = Number(token.endTime);
+      if (!isNaN(parsed)) {
+        endTime = parsed * 1000; // Unix timestamp in seconds
+      } else {
+        endTime = new Date(token.endTime).getTime(); // ISO string
+      }
+    } else {
+      endTime = Number(token.endTime) * 1000;
+    }
+
+    // If start time hasn't started → UPCOMING
+    if (now < startTime) {
+      return 'upcoming';
+    }
+    // If start time has started and end time hasn't passed → LIVE
+    else if (now >= startTime && now <= endTime) {
+      return 'live';
+    }
+    // If end time has passed → ENDED
+    else {
+      return 'ended';
+    }
+  };
+
+  const filteredDefaultTokens = useMemo(() => {
+    return defaultTokens.filter((token) => {
+      const status = getTokenStatus(token);
+      if (activeTab === 'LIVE') return status === 'live';
+      if (activeTab === 'UPCOMING') return status === 'upcoming';
+      if (activeTab === 'ENDED') return status === 'ended';
       return true;
     });
   }, [defaultTokens, activeTab]);
 
   const filteredSearchResults = useMemo(() => {
-    if (activeTab === 'LIVE') return searchResults;
-
-    // Apply same client-side filtering for search results if backend only filters by active=false
     return searchResults.filter((token) => {
-      if (token.status) {
-        if (activeTab === 'UPCOMING')
-          return token.status === 'upcoming' || token.status === 'pending';
-        if (activeTab === 'ENDED') return token.status === 'ended' || token.status === 'completed';
-      }
+      const status = getTokenStatus(token);
+      if (activeTab === 'LIVE') return status === 'live';
+      if (activeTab === 'UPCOMING') return status === 'upcoming';
+      if (activeTab === 'ENDED') return status === 'ended';
       return true;
     });
   }, [searchResults, activeTab]);
 
   // Determine which tokens to display
-  const displayTokens = defaultTokens;
+  const displayTokens = searchQuery.trim() ? filteredSearchResults : filteredDefaultTokens;
   const isLoading = searchQuery.trim() ? isSearching : isTokensLoading;
 
   const handleTimeRangeChange = (range: TimeRangeType) => {
@@ -196,37 +223,21 @@ export default function TokenSearch() {
             </button>
           </div>
         </div>
-        {(selectedTimeRange !== 'all' || tag) && (
+        {selectedTimeRange !== 'all' && (
           <div className="flex flex-wrap items-center gap-2">
-            {selectedTimeRange !== 'all' && (
-              <button
-                onClick={() => handleTimeRangeChange('all')}
-                className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-sm text-blue-700 transition hover:bg-blue-100"
-              >
-                <span>{getTimeRangeLabel(selectedTimeRange)}</span>
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {tag && (
-              <button
-                onClick={() => setTag(undefined)}
-                className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-sm text-blue-700 transition hover:bg-blue-100"
-              >
-                <span className="capitalize flex items-center gap-2">
-                  <span>{TAG_ICONS[tag]}</span>
-                  <span>{tag}</span>
-                </span>
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {(selectedTimeRange !== 'all' || tag) && (
-              <button
-                onClick={handleClearAll}
-                className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-sm text-gray-600 transition hover:bg-gray-100 cursor-pointer"
-              >
-                Clear all
-              </button>
-            )}
+            <button
+              onClick={() => handleTimeRangeChange('all')}
+              className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-sm text-blue-700 transition hover:bg-blue-100"
+            >
+              <span>{getTimeRangeLabel(selectedTimeRange)}</span>
+              <X className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={handleClearAll}
+              className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-sm text-gray-600 transition hover:bg-gray-100 cursor-pointer"
+            >
+              Clear all
+            </button>
           </div>
         )}
       </div>
@@ -252,25 +263,22 @@ export default function TokenSearch() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {displayTokens.map((token) => (
             <ExploreTokenCard
-              key={token.id}
+              key={token.address}
               className="lg:max-w-[400px]"
-              id={token.id.toString()}
-              mint={token.mintAddress}
-              banner={token.metadata?.bannerUri || token.metadata?.tokenUri || ''}
-              avatar={token.metadata?.tokenUri || ''}
-              name={token.name}
-              symbol={token.symbol}
+              id={token.address}
+              mint={token.tokenMint}
+              tokenUri={token.tokenUri}
+              name={token.tokenName}
+              symbol={token.tokenSymbol}
               description={token.description || ''}
               decimals={token.decimals}
-              totalSupply={token.totalSupply}
+              totalSupply={token.totalSupply.toString()}
               pricePerToken={(token as any).pricePerToken}
               amountToSell={(token as any).amountToSell}
               minAmountToSell={(token as any).minAmountToSell}
               totalClaimed={(token as any).totalClaimed || 0}
-              actionButton={{
-                text: `Buy $${token.symbol}`,
-                variant: 'presale' as const,
-              }}
+              startTime={token.startTime.toString()}
+              endTime={token.endTime.toString()}
             />
           ))}
         </div>

@@ -4,68 +4,114 @@ import { useRouter } from 'next/navigation';
 import { getIpfsUrl } from '@/lib/utils';
 import { formatNumberToCurrency } from '@/utils';
 import { triggerProgressBar } from './layout/PageProgressBar';
+import { useCallback, useEffect, useState } from 'react';
 
 interface ExploreTokenCardProps {
   id: string;
   mint: string;
   decimals: number;
   totalSupply: string | number;
-  banner: string;
-  avatar: string;
+  tokenUri: string;
   name: string;
   symbol: string;
   description: string;
-  actionButton: {
-    text: string;
-    variant: 'presale' | 'curve' | 'trade';
-  };
   className?: string;
   // Launch-specific data
-  pricePerToken?: number;
-  amountToSell?: number;
-  minAmountToSell?: number;
-  totalClaimed?: number;
+  pricePerToken?: number | bigint;
+  amountToSell?: number | bigint;
+  minAmountToSell?: number | bigint;
+  totalClaimed?: number | bigint;
+  startTime?: string | number | bigint;
+  endTime?: string | number | bigint;
 }
 
 export default function ExploreTokenCard({
   mint,
   decimals,
   totalSupply,
-  banner,
-  avatar,
+  tokenUri,
   name,
   symbol,
   description,
-  actionButton,
   className,
   pricePerToken = 0,
   amountToSell = 0,
   minAmountToSell = 0,
   totalClaimed = 0,
+  startTime,
+  endTime,
 }: ExploreTokenCardProps) {
   const navigate = useRouter();
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const fetchTokenUri = useCallback(async () => {
+    try{
+      const re = await fetch(tokenUri);
+      const data = await re.json();
+      setImageUrl(data.image);
+    }catch(e){
+      return null
+    }
+  }, [mint]);
 
-  // Calculate progress based on launch data
+  useEffect(() => {
+    fetchTokenUri();
+  }, [fetchTokenUri]);
+
   const supply = typeof totalSupply === 'string' ? parseFloat(totalSupply) : totalSupply;
-  const sold = totalClaimed / (10 ** decimals); // Convert from raw amount
-  const goal = amountToSell / (10 ** decimals); // Convert from raw amount
+  const totalClaimedNum = typeof totalClaimed === 'bigint' ? Number(totalClaimed) : (totalClaimed || 0);
+  const amountToSellNum = typeof amountToSell === 'bigint' ? Number(amountToSell) : (amountToSell || 0);
+  const pricePerTokenNum = typeof pricePerToken === 'bigint' ? Number(pricePerToken) : (pricePerToken || 0);
+  
+  const sold = totalClaimedNum / (10 ** decimals); 
+  const goal = amountToSellNum / (10 ** decimals); 
   const progressPercent = goal > 0 ? (sold / goal) * 100 : 0;
 
-  // Price in lamports to SOL (assuming pricePerToken is in lamports)
-  const priceInSol = pricePerToken / 1e9;
+  const priceInSol = pricePerTokenNum / 1e9;
 
-  const getActionButtonStyle = (variant: string) => {
-    switch (variant) {
-      case 'presale':
-        return 'bg-red-500 hover:bg-red-600';
-      case 'curve':
-        return 'bg-red-500 hover:bg-red-600';
-      case 'trade':
-        return 'bg-red-500 hover:bg-red-600';
-      default:
-        return 'bg-red-500 hover:bg-red-600';
+  const getStatus = () => {
+    if (!startTime || !endTime) return { label: 'LIVE', color: '#34c759' };
+    const now = Date.now();
+    let start: number;
+    let end: number;
+
+    if (typeof startTime === 'bigint') {
+      start = Number(startTime) * 1000; 
+    } else if (typeof startTime === 'string') {
+      const parsed = Number(startTime);
+      if (!isNaN(parsed)) {
+        start = parsed * 1000; 
+      } else {
+        start = new Date(startTime).getTime(); 
+      }
+    } else {
+      start = Number(startTime) * 1000;
+    }
+
+    if (typeof endTime === 'bigint') {
+      end = Number(endTime) * 1000; 
+    } else if (typeof endTime === 'string') {
+      const parsed = Number(endTime);
+      if (!isNaN(parsed)) {
+        end = parsed * 1000; 
+      } else {
+        end = new Date(endTime).getTime(); 
+      }
+    } else {
+      end = Number(endTime) * 1000;
+    }
+
+    if (now < start) {
+      return { label: 'UPCOMING', color: '#3b82f6' }; 
+    }
+    else if (now >= start && now <= end) {
+      return { label: 'LIVE', color: '#34c759' }; 
+    }
+    else {  
+      return { label: 'ENDED', color: '#ef4444' }; // Red
     }
   };
+
+  const status = getStatus();
 
   return (
     <motion.div
@@ -93,13 +139,21 @@ export default function ExploreTokenCard({
         <div className="absolute left-[21.67px] right-[21.66px] top-[21.67px] flex items-start justify-between">
           <div className="border border-[rgba(255,255,255,0.1)] rounded-[7px] w-14 h-14">
             <motion.img
-              src={getIpfsUrl(avatar)}
+              src={imageUrl || ''}
               alt={name}
               className="w-full h-full object-cover rounded-[7px]"
             />
           </div>
-          <div className="border border-[#34c759] px-[11.167px] py-[4.167px]">
-            <span className="font-rajdhani font-medium text-sm text-[#34c759]">Active</span>
+          <div
+            className="border px-[11.167px] py-[4.167px]"
+            style={{ borderColor: status.color }}
+          >
+            <span
+              className="font-rajdhani font-medium text-sm"
+              style={{ color: status.color }}
+            >
+              {status.label}
+            </span>
           </div>
         </div>
 

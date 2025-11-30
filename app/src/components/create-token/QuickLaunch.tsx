@@ -20,7 +20,7 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
   const walletSol = useWallet();
   const router = useRouter();
   const { publicKey } = walletSol;
-  const { deployToken } = useDeployToken();
+  const { deployToken, deployWithExistingToken } = useDeployToken();
   
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isExistingToken, setIsExistingToken] = useState(false);
@@ -331,17 +331,41 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
       return;
     }
 
-      if (!isExistingToken) {
-    const totalSupply = Number(formData.tokenSupply);
-    if (!Number.isFinite(totalSupply) || totalSupply <= 0 || !Number.isInteger(totalSupply)) {
-      toast.error('Token supply must be a positive integer');
-      return;
-    }
+      if (isExistingToken) {
+        // Validate existing token fields
+        if (!formData.existingMintAddress.trim()) {
+          toast.error('Token mint address is required');
+          return;
+        }
 
-    const decimals = Number(formData.decimal);
-    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 99) {
-      toast.error('Token decimals must be an integer between 0 and 99');
-      return;
+        // Validate Solana public key format
+        try {
+          // This will throw if invalid
+          const _ = formData.existingMintAddress.length;
+          if (formData.existingMintAddress.length < 32 || formData.existingMintAddress.length > 44) {
+            throw new Error('Invalid length');
+          }
+        } catch {
+          toast.error('Invalid token mint address format');
+          return;
+        }
+
+        const decimals = Number(formData.decimal);
+        if (!Number.isInteger(decimals) || decimals < 0 || decimals > 99) {
+          toast.error('Token decimals must be an integer between 0 and 99');
+          return;
+        }
+      } else {
+        const totalSupply = Number(formData.tokenSupply);
+        if (!Number.isFinite(totalSupply) || totalSupply <= 0 || !Number.isInteger(totalSupply)) {
+          toast.error('Token supply must be a positive integer');
+          return;
+        }
+
+        const decimals = Number(formData.decimal);
+        if (!Number.isInteger(decimals) || decimals < 0 || decimals > 99) {
+          toast.error('Token decimals must be an integer between 0 and 99');
+          return;
         }
       }
 
@@ -359,11 +383,6 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
     if (!publicKey) {
       toast.error('Please connect your wallet first');
       return;
-    }
-
-    if (isExistingToken) {
-        toast.error("Existing token feature is coming soon!");
-        return;
     }
 
     // Validate Step 2 fields
@@ -485,7 +504,9 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
       const decimals = Number(formData.decimal);
 
       // Convert all token amounts to smallest unit (multiply by 10^decimals)
-      const totalSupply = BigInt(Math.floor(Number(formData.tokenSupply) * Math.pow(10, decimals)));
+      const totalSupply = isExistingToken
+        ? BigInt(0) // For existing token, we don't need total supply in the same way
+        : BigInt(Math.floor(Number(formData.tokenSupply) * Math.pow(10, decimals)));
       const minAmountToSell = BigInt(Math.floor(Number(formData.minRaise) * Math.pow(10, decimals)));
       const amountToSell = BigInt(Math.floor(Number(formData.amountToBeSold) * Math.pow(10, decimals)));
 
@@ -502,7 +523,7 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
         start_time: startTime,
         end_time: endTime,
         max_claims_per_user: BigInt(1000000),
-        total_supply: totalSupply,
+        total_supply: isExistingToken ? amountToSell : totalSupply,
         tokens_per_proof: BigInt(1),
         price_per_token: pricePerToken,
         min_amount_to_sell: minAmountToSell,
@@ -516,41 +537,41 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
         decimals: decimals,
       };
 
-      const result = await deployToken(launchParams, tokenDetails);
+      let result;
+      if (isExistingToken) {
+        // Use the existing token deployment function
+        result = await deployWithExistingToken(
+          launchParams,
+          tokenDetails,
+          formData.existingMintAddress,
+          amountToSell
+        );
+      } else {
+        // Use the regular deployment function
+        result = await deployToken(launchParams, tokenDetails);
+      }
 
       if (!result) {
         throw new Error('Token deployment failed');
       }
 
-      // Check if this is an existing launch
-      if (result.signature === 'existing') {
-        console.log('✅ Loaded existing launch!');
-        console.log('Launch PDA:', result.launchPda);
-        console.log('Token Mint:', result.tokenMint);
+      console.log('✅ Token deployed successfully!');
+      console.log('Launch PDA:', result.launchPda);
+      console.log('Token Mint:', result.tokenMint);
+      console.log('Signature:', result.signature);
 
-        // Complete deployment immediately (no transaction to confirm)
-        setDeploymentProgress(100);
-        toast.dismiss('deployment-progress');
-        toast.success('Loaded existing launch successfully!');
-      } else {
-        console.log('✅ Token deployed successfully!');
-        console.log('Launch PDA:', result.launchPda);
-        console.log('Token Mint:', result.tokenMint);
-        console.log('Signature:', result.signature);
+      // Step 4: Confirming Transaction
+      setDeploymentStep(4);
+      setDeploymentProgress(90);
+      toast.loading('Confirming transaction...', {
+        id: 'deployment-progress',
+      });
 
-        // Step 4: Confirming Transaction
-        setDeploymentStep(4);
-        setDeploymentProgress(90);
-        toast.loading('Confirming transaction...', {
-          id: 'deployment-progress',
-        });
-
-        // Complete deployment
-        setDeploymentProgress(100);
-        toast.dismiss('deployment-progress');
-        toast.success('Token deployed successfully!');
-      }
-
+      // Complete deployment
+      setDeploymentProgress(100);
+      toast.dismiss('deployment-progress');
+      toast.success('Token deployed successfully!');
+      
       // Store token data for success modal
       setCreatedTokenData({
         name: formData.tokenName,
