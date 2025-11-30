@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { AboutProject } from '@/components/token/AboutProject';
 import { AnonymityMetrics } from '@/components/token/AnonymityMetrics';
 import { SaleInformation } from '@/components/token/SaleInformation';
@@ -6,6 +7,14 @@ import { TokenHeader } from '@/components/token/TokenHeader';
 import { TokenStats } from '@/components/token/TokenStats';
 import { Tokenomics } from '@/components/token/Tokenomics';
 import { TradingInterface } from '@/components/token/TradingInterface';
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
 
 
 // Force dynamic rendering since we're fetching data from external API
@@ -67,7 +76,22 @@ export default async function TokenDetailPage({
   };
 
   return (
-    <div className="min-h-screen xl:container mx-auto py-10 px-4 md:px-6">
+    <div className="min-h-screen xl:container mx-auto py-5 px-4 md:px-6">
+      {/* Breadcrumb */}
+      <Breadcrumb className="mb-6">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/">EXPLORE</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{token.name}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Main Column */}
         <div className="flex-1 flex flex-col gap-6 max-w-[789px]">
@@ -79,7 +103,7 @@ export default async function TokenDetailPage({
         </div>
 
         {/* Sidebar Column */}
-        <div className="w-full lg:w-[395px] flex flex-col gap-6 shrink-0">
+        <div className="w-full lg:w-[395px] lg:min-w-[395px] flex flex-col gap-4 sm:gap-5 md:gap-6 shrink-0">
            <TradingInterface token={token} address={address} />
            <AnonymityMetrics />
         </div>

@@ -1,4 +1,4 @@
-import type { Token } from '@/types/api';
+import type { Token } from '@/types/token';
 
 /**
  * In-memory cache for token data
@@ -114,9 +114,9 @@ class TokenCache {
     return this.cache.filter((token) => {
       return (
         token.name.toLowerCase().includes(queryLower) ||
-        token.symbol.toLowerCase().includes(queryLower) ||
+        token.tokenSymbol.toLowerCase().includes(queryLower) ||
         token.description?.toLowerCase().includes(queryLower) ||
-        token.mintAddress.toLowerCase().includes(queryLower)
+        token.tokenMint.toLowerCase().includes(queryLower)
       );
     });
   }
@@ -141,52 +141,15 @@ class TokenCache {
     if (options.active !== undefined) {
       filtered = filtered.filter((token) => {
         if (options.active) {
-          return token.status === 'live' || token.status === 'pending';
+          return token.isActive;
         } else {
           return (
-            token.status === 'upcoming' ||
-            token.status === 'ended' ||
-            token.status === 'completed'
+            !token.isActive
           );
         }
       });
     }
-
-    // Filter by tag
-    if (options.tag) {
-      filtered = filtered.filter((token) => {
-        const description = token.description?.toLowerCase() || '';
-        const tags = token.tags?.map((t: string) => t.toLowerCase()) || [];
-        return (
-          description.includes(options.tag!.toLowerCase()) ||
-          tags.includes(options.tag!.toLowerCase())
-        );
-      });
-    }
-
-    // Filter by start date
-    if (options.startDate) {
-      const startDate = new Date(options.startDate);
-      filtered = filtered.filter((token) => {
-        const createdAt = new Date(token.createdAt);
-        return createdAt >= startDate;
-      });
-    }
-
-    // Filter by end date
-    if (options.endDate) {
-      const endDate = new Date(options.endDate);
-      filtered = filtered.filter((token) => {
-        const createdAt = new Date(token.createdAt);
-        return createdAt <= endDate;
-      });
-    }
-
-    // Filter by owner
-    if (options.owner) {
-      filtered = filtered.filter((token) => token.owner === options.owner);
-    }
-
+    
     return filtered;
   }
 
@@ -199,19 +162,19 @@ class TokenCache {
     switch (sortBy) {
       case 'date':
         return sorted.sort((a, b) => {
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          return Number(b.startTime) - Number(a.startTime);
         });
 
       case 'name':
         return sorted.sort((a, b) => {
-          return a.name.localeCompare(b.name);
+          return a.tokenName.localeCompare(b.tokenName);
         });
 
       case 'relevance':
         // For now, relevance is same as date
         // Can be enhanced with scoring algorithm
         return sorted.sort((a, b) => {
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          return Number(b.startTime) - Number(a.startTime);
         });
 
       default:

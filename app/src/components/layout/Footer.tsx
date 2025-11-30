@@ -61,9 +61,6 @@ export function Footer() {
                 <span>Built with love by 🍗</span>
                 <span className="font-semibold text-[#ffc929]">cooked</span>
                 <span>cypherpunks</span>
-                 <div className="w-6 h-6 ml-2">
-                    <img src="https://www.figma.com/api/mcp/asset/1c2ea0f8-0d19-459d-9170-1e755a3672ca" alt="" className="w-full h-full" />
-                </div>
             </div>
         </div>
       </div>

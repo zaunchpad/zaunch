@@ -123,6 +123,245 @@ export const useDeployToken = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const deployWithExistingToken = useCallback(
+    async (
+      launchParams: LaunchParams,
+      tokenDetails: TokenDetails,
+      existingMintAddress: string,
+      tokenAmount: bigint
+    ) => {
+      if (!publicKey) {
+        setError('Wallet not connected');
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        console.log('🚀 Starting launch with existing token...');
+        console.log('Wallet public key:', publicKey.toString());
+        console.log('Existing token mint:', existingMintAddress);
+
+        // Validate and parse the mint address
+        let tokenMint: PublicKey;
+        try {
+          tokenMint = new PublicKey(existingMintAddress);
+        } catch (err) {
+          throw new Error('Invalid token mint address');
+        }
+
+        // Derive PDAs
+        const [launchPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from('launch'), publicKey.toBuffer(), Buffer.from(launchParams.name)],
+          PROGRAM_ID
+        );
+
+        const [registryPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from('registry_v2')],
+          PROGRAM_ID
+        );
+
+        const [tokenVaultPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from('vault'), launchPda.toBuffer()],
+          PROGRAM_ID
+        );
+
+        // Get creator's token account
+        const creatorTokenAccount = getAssociatedTokenAddressSync(
+          tokenMint,
+          publicKey
+        );
+
+        console.log('📝 PDAs derived:');
+        console.log('  Launch PDA:', launchPda.toString());
+        console.log('  Registry PDA:', registryPda.toString());
+        console.log('  Token Vault PDA:', tokenVaultPda.toString());
+        console.log('  Creator Token Account:', creatorTokenAccount.toString());
+
+        // Serialize instruction data
+        const variantBuffer = Buffer.from([13]); // CreateLaunchWithExistingToken = variant 13
+
+        // Serialize strings with length prefix (4 bytes)
+        const serializeString = (str: string): Buffer => {
+          const strBuf = Buffer.from(str, 'utf-8');
+          const lenBuf = Buffer.alloc(4);
+          lenBuf.writeUInt32LE(strBuf.length, 0);
+          return Buffer.concat([lenBuf, strBuf]);
+        };
+
+        // Serialize u64/i64 as 8 bytes little-endian
+        const serializeU64 = (val: bigint): Buffer => {
+          const arr = new Uint8Array(8);
+          let n = val;
+          for (let i = 0; i < 8; i++) {
+            arr[i] = Number(n & BigInt(0xff));
+            n = n >> BigInt(8);
+          }
+          return Buffer.from(arr);
+        };
+
+        const serializeI64 = (val: bigint): Buffer => {
+          const arr = new Uint8Array(8);
+          let n = val;
+          for (let i = 0; i < 8; i++) {
+            arr[i] = Number(n & BigInt(0xff));
+            n = n >> BigInt(8);
+          }
+          return Buffer.from(arr);
+        };
+
+        const serializeU8 = (val: number): Buffer => {
+          const buf = Buffer.alloc(1);
+          buf.writeUInt8(val, 0);
+          return buf;
+        };
+
+        // Build the instruction data
+        const instructionData = Buffer.concat([
+          variantBuffer,
+          serializeString(launchParams.name),
+          serializeString(launchParams.description),
+          serializeString(launchParams.creator_wallet),
+          serializeI64(launchParams.start_time),
+          serializeI64(launchParams.end_time),
+          serializeU64(launchParams.max_claims_per_user),
+          serializeU64(launchParams.total_supply),
+          serializeU64(launchParams.tokens_per_proof),
+          serializeU64(launchParams.price_per_token),
+          serializeU64(launchParams.min_amount_to_sell),
+          serializeU64(launchParams.amount_to_sell),
+          serializeString(tokenDetails.token_name),
+          serializeString(tokenDetails.token_symbol),
+          serializeString(tokenDetails.token_uri),
+          serializeU8(tokenDetails.decimals),
+          serializeU64(tokenAmount),
+        ]);
+
+        // Build the instruction
+        const createLaunchIx = new TransactionInstruction({
+          keys: [
+            { pubkey: publicKey, isSigner: true, isWritable: true },
+            { pubkey: launchPda, isSigner: false, isWritable: true },
+            { pubkey: registryPda, isSigner: false, isWritable: true },
+            { pubkey: tokenMint, isSigner: false, isWritable: false },
+            { pubkey: tokenVaultPda, isSigner: false, isWritable: true },
+            { pubkey: creatorTokenAccount, isSigner: false, isWritable: true },
+            { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+            { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+          ],
+          programId: PROGRAM_ID,
+          data: instructionData,
+        });
+
+        console.log('📤 Preparing transaction...');
+
+        // Create and send transaction
+        const transaction = new Transaction().add(createLaunchIx);
+        transaction.feePayer = publicKey;
+
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+
+        console.log('🔍 Simulating transaction...');
+
+        // Simulate transaction before sending
+        try {
+          const simulation = await connection.simulateTransaction(transaction, undefined);
+
+          if (simulation.value.err) {
+            console.error('❌ Simulation failed:', simulation.value.err);
+            console.error('Logs:', simulation.value.logs);
+            throw new Error(
+              `Transaction simulation failed: ${JSON.stringify(simulation.value.err)}`
+            );
+          }
+
+          console.log('✅ Simulation successful!');
+          if (simulation.value.logs) {
+            console.log('Simulation logs:', simulation.value.logs.join('\n'));
+          }
+        } catch (simError: any) {
+          console.error('❌ Simulation error:', simError);
+          throw new Error(
+            `Failed to simulate transaction: ${simError.message || 'Unknown error'}`
+          );
+        }
+
+        console.log('📤 Sending transaction...');
+
+        // Send transaction (wallet will sign it)
+        const signature = await sendTransaction(transaction, connection, {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed',
+        });
+
+        console.log('⏳ Confirming transaction...');
+
+        // Confirm transaction
+        await connection.confirmTransaction({
+          signature,
+          blockhash,
+          lastValidBlockHeight,
+        }, 'confirmed');
+
+        console.log('✅ Launch created with existing token successfully!');
+        console.log('Launch PDA:', launchPda.toString());
+        console.log('Token Mint:', tokenMint.toString());
+        console.log('Signature:', signature);
+
+        return {
+          signature,
+          launchPda: launchPda.toString(),
+          tokenMint: tokenMint.toString(),
+        };
+      } catch (err: any) {
+        console.error('❌ Deploy with existing token error:', err);
+
+        // Try to get more details from error
+        if (err.logs) {
+          console.error('Transaction logs:', err.logs);
+        }
+
+        // Check for specific error patterns
+        let errorMessage = err.message || 'Failed to create launch with existing token';
+
+        // Simulation-specific errors
+        if (errorMessage.includes('simulation failed')) {
+          if (errorMessage.includes('InsufficientFundsForRent') || errorMessage.includes('insufficient lamports')) {
+            errorMessage = 'Insufficient SOL for rent. You need more SOL in your wallet to create accounts.';
+          } else if (errorMessage.includes('InvalidAccountData')) {
+            errorMessage = 'Invalid account data. Please check your input parameters.';
+          } else if (errorMessage.includes('AccountAlreadyInitialized')) {
+            errorMessage = 'A launch with this name already exists. Please use a different name.';
+          } else if (errorMessage.includes('custom program error')) {
+            errorMessage = 'Program execution failed. Check the browser console for detailed logs.';
+          }
+        } else if (errorMessage.includes('0x1')) {
+          errorMessage = 'Program error: Insufficient funds for transaction';
+        } else if (errorMessage.includes('0x0')) {
+          errorMessage = 'Program error: Custom program error';
+        } else if (errorMessage.includes('Signature verification failed')) {
+          errorMessage = 'Transaction signing failed. Please try again.';
+        } else if (errorMessage.includes('invalid program argument')) {
+          errorMessage =
+            'Invalid program argument. This usually means a PDA mismatch. Check console logs.';
+        } else if (errorMessage.includes('User rejected the request') || errorMessage.includes('User rejected')) {
+          errorMessage = 'Transaction rejected by user.';
+        } else if (errorMessage.includes('Blockhash not found')) {
+          errorMessage = 'Transaction expired. Please try again.';
+        }
+
+        setError(errorMessage);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [connection, publicKey, sendTransaction]
+  );
+
   const deployToken = useCallback(
     async (launchParams: LaunchParams, tokenDetails: TokenDetails) => {
       if (!publicKey) {
@@ -308,6 +547,7 @@ export const useDeployToken = () => {
 
   return {
     deployToken,
+    deployWithExistingToken,
     isLoading,
     error,
   };

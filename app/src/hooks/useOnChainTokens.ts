@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Token } from '@/types/api';
+import type { Token } from '@/types/token';
 import { getAllLaunches } from '@/lib/onchain-launch';
 
 
 interface UseOnChainTokensOptions {
-  tag?: string;
   startDate?: string;
   endDate?: string;
   active?: boolean;
@@ -28,7 +27,7 @@ interface UseOnChainTokensReturn {
 export function useOnChainTokens(
   options: UseOnChainTokensOptions = {},
 ): UseOnChainTokensReturn {
-  const { tag, startDate, active, searchQuery } = options;
+  const { startDate, active, searchQuery } = options;
 
   const [tokens, setTokens] = useState<Token[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,17 +47,41 @@ export function useOnChainTokens(
       // Apply filters manually
       let filtered = [...allLaunches];
 
-      // Filter by active status
+      // Filter by active status based on time
       if (active !== undefined) {
+        const now = Date.now();
         filtered = filtered.filter((token) => {
+          // Calculate status from start and end time
+          const startTime = token.startTime
+            ? (typeof token.startTime === 'string' ? new Date(token.startTime).getTime() : Number(token.startTime) * 1000)
+            : 0;
+          const endTime = token.endTime
+            ? (typeof token.endTime === 'string' ? new Date(token.endTime).getTime() : Number(token.endTime) * 1000)
+            : 0;
+
+          // Determine actual status
+          let actualStatus = 'live';
+          if (startTime && endTime) {
+            // If start time hasn't started → UPCOMING
+            if (now < startTime) {
+              actualStatus = 'upcoming';
+            }
+            // If start time has started and end time hasn't passed → LIVE
+            else if (now >= startTime && now <= endTime) {
+              actualStatus = 'live';
+            }
+            // If end time has passed → ENDED
+            else {
+              actualStatus = 'ended';
+            }
+          }
+
           if (active) {
-            return token.status === 'live' || token.status === 'pending';
+            // LIVE tab: show only live tokens
+            return actualStatus === 'live';
           } else {
-            return (
-              token.status === 'upcoming' ||
-              token.status === 'ended' ||
-              token.status === 'completed'
-            );
+            // For UPCOMING and ENDED tabs, show non-live tokens
+            return actualStatus === 'upcoming' || actualStatus === 'ended';
           }
         });
       }
@@ -69,16 +92,16 @@ export function useOnChainTokens(
         filtered = filtered.filter((token) => {
           return (
             token.name.toLowerCase().includes(query) ||
-            token.symbol.toLowerCase().includes(query) ||
             token.description?.toLowerCase().includes(query) ||
-            token.mintAddress.toLowerCase().includes(query)
+            token.tokenSymbol.toLowerCase().includes(query) ||
+            token.tokenMint.toLowerCase().includes(query)
           );
         });
       }
 
       // Sort by creation date (newest first)
       const sortedTokens = filtered.sort((a, b) => {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return Number(b.startTime) - Number(a.startTime);
       });
 
       setTokens(sortedTokens);
@@ -89,7 +112,7 @@ export function useOnChainTokens(
     } finally {
       setIsLoading(false);
     }
-  }, [tag, startDate, active, searchQuery]);
+  }, [startDate, active, searchQuery]);
 
   // Initial fetch only (no auto-refresh)
   useEffect(() => {
@@ -104,10 +127,6 @@ export function useOnChainTokens(
   };
 }
 
-/**
- * Hook to search tokens on-chain with debouncing
- * This replaces the API-based search with on-chain queries
- */
 export function useOnChainSearch(options: {
   owner?: string;
   debounceMs?: number;
@@ -119,7 +138,6 @@ export function useOnChainSearch(options: {
   const [searchResults, setSearchResults] = useState<Token[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
-  const [tag, setTag] = useState<string | undefined>(undefined);
   const [timeRange, setTimeRange] = useState<string | undefined>(undefined);
 
   const performSearch = useCallback(
@@ -142,9 +160,9 @@ export function useOnChainSearch(options: {
         const searchResults = allLaunches.filter((token) => {
           return (
             token.name.toLowerCase().includes(queryLower) ||
-            token.symbol.toLowerCase().includes(queryLower) ||
+            token.tokenSymbol.toLowerCase().includes(queryLower) ||
             token.description?.toLowerCase().includes(queryLower) ||
-            token.mintAddress.toLowerCase().includes(queryLower)
+            token.tokenMint.toLowerCase().includes(queryLower)
           );
         });
 
@@ -152,39 +170,53 @@ export function useOnChainSearch(options: {
         let filtered = [...searchResults];
 
         if (active !== undefined) {
+          const now = Date.now();
           filtered = filtered.filter((token) => {
-            if (active) {
-              return token.status === 'live' || token.status === 'pending';
-            } else {
-              return (
-                token.status === 'upcoming' ||
-                token.status === 'ended' ||
-                token.status === 'completed'
-              );
-            }
-          });
-        }
+            // Calculate status from start and end time
+            const startTime = token.startTime
+              ? (typeof token.startTime === 'string' ? new Date(token.startTime).getTime() : Number(token.startTime) * 1000)
+              : 0;
+            const endTime = token.endTime
+              ? (typeof token.endTime === 'string' ? new Date(token.endTime).getTime() : Number(token.endTime) * 1000)
+              : 0;
 
-        if (tag) {
-          filtered = filtered.filter((token) => {
-            const description = token.description?.toLowerCase() || '';
-            const tags = token.tags?.map((t: string) => t.toLowerCase()) || [];
-            return (
-              description.includes(tag.toLowerCase()) || tags.includes(tag.toLowerCase())
-            );
+            // Determine actual status
+            let actualStatus = 'live';
+            if (startTime && endTime) {
+              // If start time hasn't started → UPCOMING
+              if (now < startTime) {
+                actualStatus = 'upcoming';
+              }
+              // If start time has started and end time hasn't passed → LIVE
+              else if (now >= startTime && now <= endTime) {
+                actualStatus = 'live';
+              }
+              // If end time has passed → ENDED
+              else {
+                actualStatus = 'ended';
+              }
+            }
+
+            if (active) {
+              // LIVE tab: show only live tokens
+              return actualStatus === 'live';
+            } else {
+              // For UPCOMING and ENDED tabs, show non-live tokens
+              return actualStatus === 'upcoming' || actualStatus === 'ended';
+            }
           });
         }
 
         if (timeRange) {
           const startDate = new Date(timeRange);
           filtered = filtered.filter((token) => {
-            const createdAt = new Date(token.createdAt);
+            const createdAt = new Date(Number(token.startTime) * 1000);
             return createdAt >= startDate;
           });
         }
 
         if (owner) {
-          filtered = filtered.filter((token) => token.owner === owner);
+          filtered = filtered.filter((token) => token.creatorWallet === owner);
         }
 
         const finalResults = filtered;
@@ -194,8 +226,8 @@ export function useOnChainSearch(options: {
           const queryLower = query.toLowerCase();
           const aName = a.name.toLowerCase();
           const bName = b.name.toLowerCase();
-          const aSymbol = a.symbol.toLowerCase();
-          const bSymbol = b.symbol.toLowerCase();
+          const aSymbol = a.tokenSymbol.toLowerCase();
+          const bSymbol = b.tokenSymbol.toLowerCase();
 
           // Exact name match
           if (aName === queryLower && bName !== queryLower) return -1;
@@ -214,7 +246,7 @@ export function useOnChainSearch(options: {
           if (!aSymbol.startsWith(queryLower) && bSymbol.startsWith(queryLower)) return 1;
 
           // Default to date sort (newest first)
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          return Number(b.startTime) - Number(a.startTime);
         });
 
         setSearchResults(sorted);
@@ -225,7 +257,7 @@ export function useOnChainSearch(options: {
         setIsSearching(false);
       }
     },
-    [owner, tag, timeRange, active],
+    [owner, timeRange, active],
   );
 
   // Debounced search effect
@@ -254,7 +286,6 @@ export function useOnChainSearch(options: {
   }, []);
 
   const clearFilters = useCallback(() => {
-    setTag(undefined);
     setTimeRange(undefined);
   }, []);
 
@@ -264,8 +295,6 @@ export function useOnChainSearch(options: {
     searchResults,
     error,
     isSearching,
-    tag,
-    setTag,
     timeRange,
     setTimeRange,
     clearSearch,
@@ -273,9 +302,6 @@ export function useOnChainSearch(options: {
   };
 }
 
-/**
- * Hook to get user's created tokens from on-chain data
- */
 export function useUserOnChainTokens(address?: string) {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -295,11 +321,11 @@ export function useUserOnChainTokens(address?: string) {
       const allLaunches = await getAllLaunches();
       
       // Filter by owner
-      const userTokens = allLaunches.filter((token) => token.owner === address);
+      const userTokens = allLaunches.filter((token) => token.creatorWallet === address);
 
       // Sort by creation date (newest first)
       const sorted = userTokens.sort((a, b) => {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return Number(b.startTime) - Number(a.startTime);
       });
 
       setTokens(sorted);

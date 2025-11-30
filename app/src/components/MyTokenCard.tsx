@@ -4,12 +4,9 @@ import type { PublicKey } from '@solana/web3.js';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { LockKeyhole } from 'lucide-react';
 import { getTokenBalanceOnSOL } from '@/lib/sol';
-import {
-  calculateTokenPrice,
-  formatNumberToCurrency,
-  formatPriceChange,
-} from '@/utils';
+import { formatNumberToCurrency } from '@/utils';
 import { triggerProgressBar } from './layout/PageProgressBar';
 
 interface MyTokenCardProps {
@@ -17,215 +14,258 @@ interface MyTokenCardProps {
   mint: string;
   user: PublicKey;
   decimals: number;
-  banner: string;
-  avatar: string;
+  totalSupply: string | number;
+  tokenUri: string;
   name: string;
   symbol: string;
   description: string;
-  solPrice: number;
-  actionButton: {
-    text: string;
-    variant: 'presale' | 'curve' | 'trade';
-  };
   className?: string;
+  pricePerToken?: number | bigint;
+  amountToSell?: number | bigint;
+  minAmountToSell?: number | bigint;
+  totalClaimed?: number | bigint;
+  startTime?: string | number | bigint;
+  endTime?: string | number | bigint;
 }
 
 export function MyTokenCard({
   mint,
   user,
   decimals,
-  banner,
-  avatar,
+  totalSupply,
+  tokenUri,
   name,
   symbol,
   description,
-  solPrice,
-  actionButton,
   className,
+  pricePerToken = 0,
+  amountToSell = 0,
+  minAmountToSell = 0,
+  totalClaimed = 0,
+  startTime,
+  endTime,
 }: MyTokenCardProps) {
-  const [currentPrice, setCurrentPrice] = useState<number>(0);
-  const [priceChange24h, setPriceChange24h] = useState<number>(0);
+  const navigate = useRouter();
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [balance, setBalance] = useState<number>(0);
-  const [isLoadingPrice, setIsLoadingPrice] = useState<boolean>(true);
+
+  const fetchTokenUri = useCallback(async () => {
+    try {
+      const re = await fetch(tokenUri);
+      const data = await re.json();
+      setImageUrl(data.image);
+    } catch (e) {
+      return null;
+    }
+  }, [tokenUri]);
+
+  const getStatus = () => {
+    if (!startTime || !endTime) return { label: 'LIVE', color: '#34c759' };
+
+    const now = Date.now();
+
+    let start: number;
+    let end: number;
+
+    if (typeof startTime === 'bigint') {
+      start = Number(startTime) * 1000; 
+    } else if (typeof startTime === 'string') {
+      const parsed = Number(startTime);
+      if (!isNaN(parsed)) {
+        start = parsed * 1000; 
+      } else {
+        start = new Date(startTime).getTime(); 
+      }
+    } else {
+      start = Number(startTime) * 1000;
+    }
+
+    if (typeof endTime === 'bigint') {
+      end = Number(endTime) * 1000; 
+    } else if (typeof endTime === 'string') {
+      const parsed = Number(endTime);
+      if (!isNaN(parsed)) {
+        end = parsed * 1000; 
+      } else {
+        end = new Date(endTime).getTime(); 
+      }
+    } else {
+      end = Number(endTime) * 1000;
+    }
+
+    if (now < start) {
+      return { label: 'UPCOMING', color: '#3b82f6' }; 
+    }
+    else if (now >= start && now <= end) {
+      return { label: 'LIVE', color: '#34c759' }; 
+    }
+    else {
+      return { label: 'ENDED', color: '#ef4444' }; 
+    }
+  };
+
+  const status = getStatus();
 
   const fetchBalanceToken = useCallback(async () => {
     const balance = await getTokenBalanceOnSOL(mint, user?.toBase58() || '');
     setBalance(balance);
   }, [mint, user]);
 
-  const fetchTokenPrice = useCallback(async () => {
-    try {
-      setIsLoadingPrice(true);
-      setCurrentPrice(0);
-
-      setPriceChange24h(0);
-    } catch (error) {
-      console.error('Error fetching token price:', error);
-      setCurrentPrice(0);
-      setPriceChange24h(0);
-    } finally {
-      setIsLoadingPrice(false);
-    }
-  }, [mint, solPrice]);
-
   useEffect(() => {
+    fetchTokenUri();
     fetchBalanceToken();
-    fetchTokenPrice();
-  }, [fetchBalanceToken, fetchTokenPrice]);
+  }, [fetchTokenUri, fetchBalanceToken]);
 
-  const router = useRouter();
+  const supply = typeof totalSupply === 'string' ? parseFloat(totalSupply) : totalSupply;
+  const totalClaimedNum = typeof totalClaimed === 'bigint' ? Number(totalClaimed) : (totalClaimed || 0);
+  const amountToSellNum = typeof amountToSell === 'bigint' ? Number(amountToSell) : (amountToSell || 0);
+  const pricePerTokenNum = typeof pricePerToken === 'bigint' ? Number(pricePerToken) : (pricePerToken || 0);
 
-  const getActionButtonStyle = (variant: string) => {
-    switch (variant) {
-      case 'presale':
-        return 'bg-red-500 hover:bg-red-600';
-      case 'curve':
-        return 'bg-red-500 hover:bg-red-600';
-      case 'trade':
-        return 'bg-red-500 hover:bg-red-600';
-      default:
-        return 'bg-red-500 hover:bg-red-600';
-    }
-  };
+  const sold = totalClaimedNum / (10 ** decimals);
+  const goal = amountToSellNum / (10 ** decimals);
+  const progressPercent = goal > 0 ? (sold / goal) * 100 : 0;
 
-  const value = balance * currentPrice * solPrice || 0;
+  const priceInSol = pricePerTokenNum / 1e9;
+
+  const allocation = goal;
+
+  const canClaim = status.label === 'LIVE' || status.label === 'ENDED';
+  const isLocked = status.label === 'UPCOMING';
 
   return (
     <motion.div
-      whileHover={{
-        scale: 1.02,
-        y: -4,
-        transition: { duration: 0.2, ease: 'easeOut' },
-      }}
-      whileTap={{
-        scale: 0.98,
-        transition: { duration: 0.1, ease: 'easeIn' },
-      }}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className={`backdrop-blur-[2px] bg-[#000000] border border-[rgba(255,255,255,0.1)] h-[384px] relative cursor-pointer w-full max-w-[408px] ${className}`}
+      className={`backdrop-blur-[2px] bg-[#0a0a0a] border border-[rgba(255,255,255,0.1)] relative w-full ${className}`}
     >
-      <div className="h-full overflow-hidden relative">
+      <div className="overflow-hidden relative">
         {/* Corner decorations */}
         <div className="absolute border-[#d08700] border-b-0 border-l-2 border-r-0 border-solid border-t-2 left-[0.67px] w-[14px] h-[14px] top-[0.67px]" />
         <div className="absolute border-[#d08700] border-b-0 border-l-0 border-r-2 border-solid border-t-2 right-[0.67px] w-[14px] h-[14px] top-[0.67px]" />
-        <div className="absolute border-[#d08700] border-b-2 border-l-2 border-r-0 border-solid border-t-0 bottom-[0.67px] left-[0.67px] w-[14px] h-[14px]" />
-        <div className="absolute border-[#d08700] border-b-2 border-l-0 border-r-2 border-solid border-t-0 bottom-[0.67px] right-[0.67px] w-[14px] h-[14px]" />
+        <div className="absolute border-[rgba(245,245,245,0.3)] border-b-2 border-l-2 border-r-0 border-solid border-t-0 bottom-[0.67px] left-[0.67px] w-[14px] h-[14px]" />
+        <div className="absolute border-[rgba(245,245,245,0.3)] border-b-2 border-l-0 border-r-2 border-solid border-t-0 bottom-[0.67px] right-[0.67px] w-[14px] h-[14px]" />
 
-        <div className="absolute left-[21.67px] right-[21.66px] top-[21.67px] flex items-start justify-between">
-          <div className="border border-[rgba(255,255,255,0.1)] rounded-[7px] w-14 h-14" />
-          <div className="border border-[#34c759] px-[11.167px] py-[4.167px]">
-            <span className="font-rajdhani font-medium text-sm text-[#34c759]">Active</span>
-          </div>
-        </div>
-
-        <div className="absolute left-[21.67px] right-[21.66px] top-[98.67px]">
-          <h3 className="font-rajdhani font-bold text-2xl text-white leading-[28px]">{name}</h3>
-        </div>
-
-        <div className="absolute left-[21.67px] right-[21.66px] top-[130.17px]">
-          <span className="font-rajdhani font-medium text-sm text-[#d08700]">${symbol}</span>
-        </div>
-
-        <div className="absolute left-[21.67px] right-[21.66px] top-[161.67px] h-[35px] overflow-hidden">
-          <p className="font-rajdhani text-sm text-gray-400 leading-[17.5px] line-clamp-2">
-            {description}
-          </p>
-        </div>
-
-        <div className="absolute left-[21.67px] right-[21.66px] top-[217.67px] flex flex-col gap-2">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="text-center flex flex-col">
-              <span className="font-rajdhani font-bold text-sm text-white">
-                {formatNumberToCurrency(balance)} {symbol}
-              </span>
-              <span className="font-rajdhani text-xs text-gray-500">Your Balance</span>
+        <div className="flex flex-col gap-4 p-4 md:p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-3 md:gap-4 flex-1">
+              <div className="bg-[#301342] border border-[rgba(20,184,166,0.5)] rounded-lg w-12 h-12 md:w-14 md:h-14 flex items-center justify-center shrink-0">
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt={name}
+                    className="w-full h-full object-cover rounded-lg"
+                  />
+                ) : (
+                  <span className="text-white font-bold text-xl font-rajdhani">
+                    {name.charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5 md:gap-2 flex-1 min-w-0">
+                <div className="flex flex-col">
+                  <h3 className="font-rajdhani font-bold text-lg md:text-xl text-white leading-tight truncate">
+                    {name}
+                  </h3>
+                  <span className="font-rajdhani font-medium text-sm md:text-base text-gray-400 leading-tight">
+                    ${symbol}
+                  </span>
+                </div>
+                <div className="bg-[rgba(208,135,0,0.15)] border border-[rgba(208,135,0,0.15)] rounded px-2 py-1 w-fit">
+                  <span className="font-rajdhani font-medium text-xs md:text-sm text-[#d08700]">
+                    {formatNumberToCurrency(sold)} {symbol} SOLD
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5 md:gap-2 ml-0 md:ml-4">
+                <div className="font-rajdhani font-medium text-xs md:text-sm text-[#d08700]">
+                  TOTAL ALLOCATION
+                </div>
+                <div className="flex items-end gap-2 md:gap-3">
+                  <div className="font-rajdhani font-bold text-xl md:text-2xl text-[#d08700] leading-tight">
+                    {formatNumberToCurrency(allocation)}
+                  </div>
+                  <div className="font-rajdhani font-medium text-xs md:text-sm text-[#d08700] leading-tight pb-0.5">
+                    {symbol}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="text-center flex flex-col">
-              {isLoadingPrice ? (
-                <span className="font-rajdhani font-bold text-sm text-white">...</span>
-              ) : (
-                <span className="font-rajdhani font-bold text-sm text-white">
-                  ${formatNumberToCurrency(value)}
-                </span>
-              )}
-              <span className="font-rajdhani text-xs text-gray-500">Value</span>
-            </div>
-            <div className="text-center flex flex-col">
-              {isLoadingPrice ? (
-                <span className="font-rajdhani font-bold text-sm text-white">...</span>
-              ) : (
+            <div className="flex flex-row md:flex-col gap-2 md:gap-2.5 items-start md:items-end">
+              <div
+                className={`border rounded px-2 py-1 flex items-center gap-1.5 ${
+                  status.label === 'LIVE'
+                    ? 'border-[#16a34a] bg-transparent'
+                    : status.label === 'ENDED'
+                      ? 'border-gray-400 bg-transparent'
+                      : 'border-[#3b82f6] bg-transparent'
+                }`}
+              >
+                {status.label === 'LIVE' && (
+                  <div className="w-1.5 h-1.5 bg-[#16a34a] rounded-full"></div>
+                )}
                 <span
-                  className={`font-rajdhani font-bold text-sm ${
-                    priceChange24h > 0
-                      ? 'text-green-500'
-                      : priceChange24h < 0
-                        ? 'text-red-500'
-                        : 'text-white'
+                  className={`font-rajdhani font-medium text-xs md:text-sm ${
+                    status.label === 'LIVE'
+                      ? 'text-[#16a34a]'
+                      : status.label === 'ENDED'
+                        ? 'text-gray-400'
+                        : 'text-[#3b82f6]'
                   }`}
                 >
-                  {formatPriceChange(priceChange24h)}
+                  {status.label === 'LIVE' ? 'SALES LIVE' : status.label === 'ENDED' ? 'SALES ENDED' : 'UPCOMING'}
                 </span>
-              )}
-              <span className="font-rajdhani text-xs text-gray-500">24h Change</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="absolute left-[21.67px] right-[21.66px] top-[266.67px] border-t border-[rgba(255,255,255,0.05)] pt-[14.667px] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 text-gray-400">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-full h-full">
-                <circle cx="12" cy="12" r="10" strokeWidth="1.5" />
-                <rect x="9" y="9" width="6" height="6" strokeWidth="1.5" />
-              </svg>
-            </div>
-            <span className="font-rajdhani text-sm text-gray-400">12 ZEC</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 text-gray-400">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-full h-full">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="1.5"
-                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  triggerProgressBar();
+                  navigate.push(`/token/${mint}`);
+                }}
+                className={`border rounded flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 h-9 md:h-10 cursor-pointer ${
+                  isLocked
+                    ? 'border-[rgba(229,229,229,0.3)] bg-transparent'
+                    : 'border-[rgba(208,135,0,0.15)] bg-[rgba(208,135,0,0.15)]'
+                }`}
+                disabled={isLocked}
+              >
+                <LockKeyhole
+                  className={`w-3.5 h-3.5 md:w-4 md:h-4 ${
+                    isLocked ? 'text-[rgba(229,229,229,0.7)]' : 'text-[#d08700]'
+                  }`}
                 />
-              </svg>
+                <span
+                  className={`font-rajdhani font-bold text-xs md:text-sm ${
+                    isLocked ? 'text-[rgba(229,229,229,0.7)]' : 'text-[#d08700]'
+                  }`}
+                >
+                  {isLocked ? 'LOCKED' : 'VIEW POOL'}
+                </span>
+              </motion.button>
             </div>
-            <span className="font-rajdhani text-sm text-gray-400">420</span>
+          </div>
+
+          {/* Progress bar */}
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between items-center">
+              <span className="font-rajdhani text-sm text-gray-500">
+                Sold: {formatNumberToCurrency(sold)} {symbol}
+              </span>
+              <span className="font-rajdhani text-sm text-gray-500">
+                Goal: {formatNumberToCurrency(goal)} {symbol}
+              </span>
+            </div>
+            <div className="bg-[rgba(72,72,72,0.6)] h-[7px] relative overflow-hidden">
+              <div
+                className="bg-[#d08700] h-full relative transition-all duration-300"
+                style={{ width: `${Math.min(progressPercent, 100)}%` }}
+              >
+                <div className="absolute bg-white bottom-0 right-0 shadow-[0px_0px_10px_0px_#ffffff] top-0 w-[3.5px]" />
+              </div>
+            </div>
           </div>
         </div>
-
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => {
-            triggerProgressBar();
-            router.push(`/token/${mint}`);
-          }}
-          className="absolute left-[21.67px] right-[21.66px] top-[316.33px] bg-transparent border-2 border-[#d08700] px-6 py-3 flex items-center justify-center gap-2"
-        >
-          <svg
-            width="20"
-            height="20"
-            fill="none"
-            stroke="#d08700"
-            viewBox="0 0 24 24"
-            className="w-5 h-5"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M13 7l5 5m0 0l-5 5m5-5H6"
-            />
-          </svg>
-          <span className="font-share-tech-mono text-sm text-[#d08700] uppercase tracking-[0.7px]">
-            VIEW Pool
-          </span>
-        </motion.button>
       </div>
     </motion.div>
   );

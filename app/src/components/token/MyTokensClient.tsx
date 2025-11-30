@@ -5,7 +5,6 @@ import { ChevronDown, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MyTokenCard } from '@/components/MyTokenCard';
-import { TAG_ICONS, TAG_OPTIONS } from '@/components/modal/TagsSelectModal';
 import { NoTokensFound } from '@/components/NoTokensFound';
 import { TokenCardSkeleton } from '@/components/TokenCardSkeleton';
 import {
@@ -14,9 +13,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { TicketVaultContent } from '@/components/token/TicketVaultContent';
 import { useOnChainSearch, useUserOnChainTokens } from '@/hooks/useOnChainTokens';
 import { getSolPrice, getTokenBalanceOnSOL } from '@/lib/sol';
-import type { Token } from '@/types/api';
 import { calculateTokenPrice, formatNumberToCurrency } from '@/utils';
 
 interface MyTokensClientProps {
@@ -39,8 +39,6 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
     searchResults,
     isSearching,
     error: searchError,
-    tag,
-    setTag,
     timeRange,
     setTimeRange,
     clearSearch,
@@ -73,16 +71,6 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
     [setTimeRange],
   );
 
-  const handleTagChange = useCallback(
-    (selectedTag: string) => {
-      if (tag === selectedTag) {
-        setTag(undefined);
-      } else {
-        setTag(selectedTag);
-      }
-    },
-    [tag, setTag],
-  );
 
   const getTimeRangeLabel = useCallback((range: TimeRangeType): string => {
     switch (range) {
@@ -103,10 +91,9 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
 
   const handleClearFilters = useCallback(() => {
     setSelectedTimeRange('all');
-    setTag(undefined);
     setTimeRange(undefined);
     clearSearchFilters();
-  }, [clearSearchFilters, setTag, setTimeRange]);
+  }, [clearSearchFilters, setTimeRange]);
 
   const fetchSolPrice = useCallback(async () => {
     const solPrice = await getSolPrice();
@@ -120,36 +107,25 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
     refresh: refreshTokens,
   } = useUserOnChainTokens(publicKey?.toBase58());
 
-  // For now, purchased tokens will be empty until we implement purchase tracking on-chain
-  // This can be extended later to track purchases via transaction history
-  const purchasedTokens: Token[] = [];
-  const loadingPurchased = false;
-  const errorPurchased = null;
-
-  const [activeTab, setActiveTab] = useState<'created' | 'purchased'>('created');
-
   // Calculate portfolio value
   const calculatePortfolioValue = useCallback(async () => {
     if (!publicKey || !solPrice) return;
 
     try {
-      const allTokens = [...listTokens, ...purchasedTokens];
       let totalValue = 0;
 
-      for (const token of allTokens) {
+      for (const token of listTokens) {
         try {
           // Get user's balance
-          const balance = await getTokenBalanceOnSOL(token.mintAddress, publicKey.toBase58());
+          const balance = await getTokenBalanceOnSOL(token.tokenMint, publicKey.toBase58());
 
           if (balance > 0) {
-
-
             // Calculate value
-            const tokenValue = balance ;
+            const tokenValue = balance;
             totalValue += tokenValue;
           }
         } catch (error) {
-          console.error(`Error calculating value for token ${token.mintAddress}:`, error);
+          console.error(`Error calculating value for token ${token.tokenMint}:`, error);
         }
       }
 
@@ -157,43 +133,31 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
     } catch (error) {
       console.error('Error calculating portfolio value:', error);
     }
-  }, [publicKey, solPrice, listTokens, purchasedTokens]);
+  }, [publicKey, solPrice, listTokens]);
 
   useEffect(() => {
     fetchSolPrice();
   }, [fetchSolPrice]);
 
   useEffect(() => {
-    if (listTokens.length > 0 || purchasedTokens.length > 0) {
+    if (listTokens.length > 0) {
       calculatePortfolioValue();
     }
-  }, [listTokens, purchasedTokens, calculatePortfolioValue]);
-
-  const sourceTokens = useMemo(
-    () => (activeTab === 'created' ? listTokens : purchasedTokens),
-    [activeTab, listTokens, purchasedTokens],
-  );
+  }, [listTokens, calculatePortfolioValue]);
 
   const filteredTokens = useMemo(() => {
-    let filtered = [...sourceTokens];
-
-    if (tag) {
-      filtered = filtered.filter(
-        (token) =>
-          token.tags && token.tags.some((t: string) => t.toLowerCase() === tag.toLowerCase()),
-      );
-    }
+    let filtered = [...listTokens];
 
     if (timeRange) {
       const filterDate = new Date(timeRange);
-      filtered = filtered.filter((token: Token) => {
-        const tokenDate = new Date(token.createdAt);
+      filtered = filtered.filter((token) => {
+        const tokenDate = new Date(Number(token.startTime) * 1000);
         return tokenDate.getTime() >= filterDate.getTime();
       });
     }
 
     return filtered;
-  }, [sourceTokens, tag, timeRange]);
+  }, [listTokens, timeRange]);
 
   const filteredSearchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -203,7 +167,7 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
     if (timeRange) {
       const filterDate = new Date(timeRange);
       filtered = filtered.filter((token) => {
-        const tokenDate = new Date(token.createdAt);
+        const tokenDate = new Date(Number(token.startTime) * 1000);
         return tokenDate.getTime() >= filterDate.getTime();
       });
     }
@@ -212,30 +176,33 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
   }, [searchResults, timeRange, searchQuery]);
 
   const displayTokens = searchQuery.trim() && !isSearching ? filteredSearchResults : filteredTokens;
-  const displayError = searchQuery.trim()
-    ? searchError
-    : activeTab === 'created'
-      ? error
-      : errorPurchased;
+  const displayError = searchQuery.trim() ? searchError : error;
 
   const totalTokens = displayTokens.length;
   const tradingTokens = totalTokens;
 
   if (!publicKey) {
     return (
-      <div className="min-h-screen py-6 md:py-10 bg-black">
-        <div className="max-w-7xl mx-auto px-4">
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2 font-share-tech-mono uppercase">
-            My Portfolio
-          </h1>
+      <div className="min-h-screen py-6 md:py-10 bg-[#050505]">
+        <div className="max-w-[1280px] mx-auto px-4">
+          <div className="flex flex-col gap-4 items-start mb-6">
+            <div className="flex flex-col gap-2 items-start">
+              <h1 className="text-2xl md:text-3xl font-rajdhani font-bold text-white leading-tight">
+                MY COMMAND CENTRE
+              </h1>
+              <p className="text-sm md:text-base font-rajdhani text-gray-400 leading-relaxed">
+                Manage assets, claims, and deployments.
+              </p>
+            </div>
+          </div>
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
             <div className="w-48 h-48 md:w-64 md:h-64 mb-6 flex items-center justify-center">
               <img src="/images/broken-pot.png" alt="Not Found" />
             </div>
-            <h3 className="text-lg md:text-xl font-semibold text-gray-300 mb-2 font-share-tech-mono">
+            <h3 className="text-lg md:text-xl font-semibold text-gray-300 mb-2 font-rajdhani">
               Solana wallet not connected
             </h3>
-            <p className="text-sm md:text-base text-gray-500 mb-6 max-w-md px-4 font-share-tech-mono">
+            <p className="text-sm md:text-base text-gray-500 mb-6 max-w-md px-4 font-rajdhani">
               Connect your Solana wallet to view and manage your tokens.
             </p>
           </div>
@@ -244,97 +211,53 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
     );
   }
 
-  if (loading || loadingPurchased) {
+  if (loading) {
     return (
-      <div className="min-h-screen py-6 md:py-10 w-full bg-black">
-        <div className="max-w-7xl mx-auto px-4 w-full">
-          <div className="flex flex-col lg:flex-row justify-between items-start gap-4 md:gap-8 mb-6 md:mb-8">
-            <div className="max-w-md w-full lg:w-auto">
-              <h1 className="text-2xl md:text-3xl font-bold text-white mb-2 md:mb-3 font-share-tech-mono uppercase">
-                My Portfolio
+      <div className="min-h-screen py-6 md:py-10 w-full bg-[#050505]">
+        <div className="max-w-[1280px] mx-auto px-4 w-full">
+          <div className="flex flex-col gap-4 items-start mb-6">
+            <div className="flex flex-col gap-2 items-start">
+              <h1 className="text-2xl md:text-3xl font-rajdhani font-bold text-white leading-tight">
+                MY COMMAND CENTRE
               </h1>
-              <p className="text-sm md:text-base text-gray-400 leading-6 font-share-tech-mono">
-                View and manage all the tokens you've created on the token launch platforms
+              <p className="text-sm md:text-base font-rajdhani text-gray-400 leading-relaxed">
+                Manage assets, claims, and deployments.
               </p>
             </div>
-            <div className="flex md:flex-row flex-col gap-4 md:gap-8 w-full lg:w-auto">
-              <div className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-none p-4 md:p-6 md:w-80 w-full">
-                <div className="flex flex-col gap-6 md:gap-10">
-                  <div>
-                    <h3 className="text-xl md:text-2xl font-bold text-white font-share-tech-mono uppercase">
-                      My Portfolio
-                    </h3>
-                  </div>
-                  <div className="flex flex-col gap-2 md:gap-3">
-                    <div className="text-2xl md:text-3xl font-bold text-[#d08700] font-share-tech-mono">
-                      $0.00
-                    </div>
-                    <div className="text-xs md:text-sm font-medium text-gray-400 font-share-tech-mono">
-                      Total portfolio value
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-none p-4 md:p-6 md:w-80 w-full">
-                <div className="flex flex-col gap-6 md:gap-10">
-                  <div>
-                    <h3 className="text-xl md:text-2xl font-bold text-white font-share-tech-mono uppercase">
-                      Total Tokens
-                    </h3>
-                  </div>
-                  <div className="flex flex-col gap-2 md:gap-3">
-                    <div className="text-2xl md:text-3xl font-bold text-[#d08700] font-share-tech-mono">
-                      0
-                    </div>
-                    <div className="text-xs md:text-sm font-medium text-gray-400 font-share-tech-mono">
-                      (0 Trading)
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Tabs defaultValue="tokens" className="w-full">
+              <TabsList className="border border-[rgba(255,255,255,0.1)] h-[45px] bg-transparent p-[4px] w-[414px]">
+                <TabsTrigger 
+                  value="tokens"
+                  className="data-[state=active]:bg-[rgba(27,31,38,0.72)] data-[state=active]:text-gray-300 text-gray-400 font-rajdhani font-medium text-xs sm:text-sm px-3 sm:px-4 py-1.5"
+                >
+                  MY TOKENS
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="vault"
+                  disabled
+                  className="data-[state=active]:bg-[#d08700] data-[state=active]:text-black text-gray-400 font-rajdhani font-bold text-xs sm:text-sm px-3 sm:px-4 py-1.5"
+                >
+                  MY TICKET VAULT
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2 mb-6 md:mb-8">
+          <div className="flex flex-col gap-2 mb-6 md:mb-8">
             <div className="flex-1">
               <div className="relative">
                 <input
                   type="text"
                   placeholder="Search your tokens..."
                   disabled
-                  className="w-full px-3 py-2.5 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-none text-sm md:text-base font-medium text-gray-400 placeholder-gray-600 cursor-not-allowed font-share-tech-mono"
+                  className="w-full px-3 py-2.5 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-none text-sm md:text-base font-medium text-gray-400 placeholder-gray-600 cursor-not-allowed font-rajdhani"
                 />
               </div>
             </div>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild className="w-full sm:w-28">
-                <button
-                  disabled
-                  className="appearance-none px-4 py-2.5 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-none text-xs sm:text-sm text-gray-400 cursor-not-allowed flex items-center justify-between w-full sm:w-28 font-share-tech-mono"
-                >
-                  <span>Filter</span>
-                  <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-20 bg-[#000000] border border-[rgba(255,255,255,0.1)]">
-                <DropdownMenuItem disabled className="text-gray-400 font-share-tech-mono">
-                  Filter
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <button
-              disabled
-              className="bg-[rgba(255,255,255,0.1)] text-gray-500 px-6 sm:px-9 py-2.5 rounded-none text-sm font-medium flex items-center justify-center w-full sm:w-auto font-share-tech-mono uppercase"
-            >
-              Search
-            </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8 pb-50">
-            {[...Array(6)].map((_, index) => (
+          <div className="flex flex-col gap-6">
+            {[...Array(3)].map((_, index) => (
               <TokenCardSkeleton key={index} />
             ))}
           </div>
@@ -345,15 +268,39 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
 
   if (listTokens.length === 0) {
     return (
-      <div className="min-h-screen py-6 md:py-10 bg-black">
-        <div className="max-w-7xl mx-auto px-4">
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2 font-share-tech-mono uppercase">
-            My Portfolio
-          </h1>
+      <div className="min-h-screen py-6 md:py-10 bg-[#050505]">
+        <div className="max-w-[1280px] mx-auto px-4">
+          <div className="flex flex-col gap-4 items-start mb-6">
+            <div className="flex flex-col gap-2 items-start">
+              <h1 className="text-2xl md:text-3xl font-rajdhani font-bold text-white leading-tight">
+                MY COMMAND CENTRE
+              </h1>
+              <p className="text-sm md:text-base font-rajdhani text-gray-400 leading-relaxed">
+                Manage assets, claims, and deployments.
+              </p>
+            </div>
+            <Tabs defaultValue="tokens" className="w-full">
+              <TabsList className="border border-[rgba(255,255,255,0.1)] h-[45px] bg-transparent p-[4px] w-[414px]">
+                <TabsTrigger 
+                  value="tokens"
+                  className="data-[state=active]:bg-[rgba(27,31,38,0.72)] data-[state=active]:text-gray-300 text-gray-400 font-rajdhani font-medium text-xs sm:text-sm px-3 sm:px-4 py-1.5"
+                >
+                  MY TOKENS
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="vault"
+                  disabled
+                  className="data-[state=active]:bg-[#d08700] data-[state=active]:text-black text-gray-400 font-rajdhani font-bold text-xs sm:text-sm px-3 sm:px-4 py-1.5"
+                >
+                  MY TICKET VAULT
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
 
           {searchQuery.trim() && isSearching ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8 pb-50">
-              {[...Array(6)].map((_, index) => (
+            <div className="flex flex-col gap-6">
+              {[...Array(3)].map((_, index) => (
                 <TokenCardSkeleton key={index} />
               ))}
             </div>
@@ -367,10 +314,10 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
                 titleSize="text-[2rem]"
                 subTitleSize="text-base"
               />
-              {!searchQuery.trim() && activeTab === 'created' && (
+              {!searchQuery.trim() && (
                 <button
                   onClick={() => router.push('/create')}
-                  className="bg-[#d08700] hover:bg-[#e89600] text-black px-4 sm:px-6 py-2.5 sm:py-3 rounded-none text-sm sm:text-base font-medium transition-colors duration-200 font-share-tech-mono uppercase"
+                  className="bg-[#d08700] hover:bg-[#e89600] text-black px-4 sm:px-6 py-2.5 sm:py-3 rounded-none text-sm sm:text-base font-medium transition-colors duration-200 font-rajdhani uppercase mt-6"
                 >
                   Create Your First Token
                 </button>
@@ -383,245 +330,121 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
   }
 
   return (
-    <div className="min-h-screen py-6 md:py-10 bg-black">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="flex flex-col lg:flex-row justify-between items-start gap-4 md:gap-8 mb-6 md:mb-8">
-          <div className="max-w-md w-full lg:w-auto">
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2 md:mb-3 font-share-tech-mono uppercase">
-              My Portfolio
+    <div className="min-h-screen py-6 md:py-10 bg-[#050505]">
+      <div className="max-w-[1280px] mx-auto px-4">
+        <div className="flex flex-col gap-4 items-start mb-6">
+          <div className="flex flex-col gap-2 items-start">
+            <h1 className="text-2xl md:text-3xl font-rajdhani font-bold text-white leading-tight">
+              MY COMMAND CENTRE
             </h1>
-            <p className="text-sm md:text-base text-gray-400 leading-6 font-share-tech-mono">
-              View and manage all the tokens you've created on the token launch platforms
+            <p className="text-sm md:text-base font-rajdhani text-gray-400 leading-relaxed">
+              Manage assets, claims, and deployments.
             </p>
           </div>
-          <div className="flex md:flex-row flex-col gap-4 md:gap-8 w-full lg:w-auto">
-            <div className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-none p-4 md:p-6 md:w-80 w-full">
-              <div className="flex flex-col gap-6 md:gap-10">
-                <div>
-                  <h3 className="text-xl md:text-2xl font-bold text-white font-share-tech-mono uppercase">
-                    My Portfolio
-                  </h3>
-                </div>
-                <div className="flex flex-col gap-2 md:gap-3">
-                  <div className="text-2xl md:text-3xl font-bold text-[#d08700] font-share-tech-mono">
-                    ${formatNumberToCurrency(portfolioValue)}
-                  </div>
-                  <div className="text-xs md:text-sm font-medium text-gray-400 font-share-tech-mono">
-                    Total portfolio value
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-none p-4 md:p-6 md:w-80 w-full">
-              <div className="flex flex-col gap-6 md:gap-10">
-                <div>
-                  <h3 className="text-xl md:text-2xl font-bold text-white font-share-tech-mono uppercase">
-                    Total Tokens
-                  </h3>
-                </div>
-                <div className="flex flex-col gap-2 md:gap-3">
-                  <div className="text-2xl md:text-3xl font-bold text-[#d08700] font-share-tech-mono">
-                    {totalTokens}
-                  </div>
-                  <div className="text-xs md:text-sm font-medium text-gray-400 font-share-tech-mono">
-                    ({tradingTokens} Trading)
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex items-center gap-1 sm:gap-2 mb-4 border-b border-[rgba(255,255,255,0.1)] w-full overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('created')}
-            className={`px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-share-tech-mono uppercase ${activeTab === 'created' ? 'border-[#d08700] border-b-2 font-semibold text-[#d08700]' : 'border-none text-gray-500 hover:text-gray-300'} cursor-pointer whitespace-nowrap transition-colors`}
-          >
-            Created
-          </button>
-          <button
-            onClick={() => setActiveTab('purchased')}
-            className={`px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-share-tech-mono uppercase ${activeTab === 'purchased' ? 'border-[#d08700] border-b-2 font-semibold text-[#d08700]' : 'border-none text-gray-500 hover:text-gray-300'} cursor-pointer whitespace-nowrap transition-colors`}
-          >
-            Purchased
-          </button>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-2 mb-4">
-          <div className="flex-1">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search your tokens..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-3 py-2.5 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-none text-base font-medium text-white placeholder-gray-500 focus:outline-none focus:border-[#d08700] font-share-tech-mono"
-              />
-              {searchQuery && (
-                <button
-                  onClick={clearSearch}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+          <Tabs defaultValue="tokens" className='w-full'>
+              <TabsList className="border border-[rgba(255,255,255,0.1)] h-10 bg-transparent p-1 w-full md:w-[500px]">
+                <TabsTrigger 
+                  value="tokens"
+                  className="data-[state=active]:bg-[rgba(27,31,38,0.72)] data-[state=active]:text-gray-300 text-gray-400 font-rajdhani font-medium text-xs sm:text-sm px-3 sm:px-4 py-1.5"
                 >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-              {isSearching && (
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#d08700]"></div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex gap-2 w-full sm:w-auto">
-            <div className="relative flex-1 sm:flex-none">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild className="w-full sm:w-36 cursor-pointer">
-                  <button className="appearance-none flex flex-row gap-2 justify-between items-center px-3 py-2.5 sm:py-3 w-full sm:w-36 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-none text-xs sm:text-sm text-white hover:bg-[rgba(255,255,255,0.1)] focus:outline-none focus:border-[#d08700] font-share-tech-mono uppercase">
-                    <span className="truncate">{getTimeRangeLabel(selectedTimeRange)}</span>
-                    <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400 shrink-0" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-40 bg-[#000000] border border-[rgba(255,255,255,0.1)]">
-                  <DropdownMenuItem
-                    textValue="all"
-                    className="hover:bg-[rgba(255,255,255,0.1)] cursor-pointer text-gray-300 hover:text-white font-share-tech-mono"
-                    onClick={() => handleTimeRangeChange('all')}
-                  >
-                    All Time
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    textValue="24h"
-                    className="hover:bg-[rgba(255,255,255,0.1)] cursor-pointer text-gray-300 hover:text-white font-share-tech-mono"
-                    onClick={() => handleTimeRangeChange('24h')}
-                  >
-                    24 Hours
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    textValue="7d"
-                    className="hover:bg-[rgba(255,255,255,0.1)] cursor-pointer text-gray-300 hover:text-white font-share-tech-mono"
-                    onClick={() => handleTimeRangeChange('7d')}
-                  >
-                    7 Days
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    textValue="30d"
-                    className="hover:bg-[rgba(255,255,255,0.1)] cursor-pointer text-gray-300 hover:text-white font-share-tech-mono"
-                    onClick={() => handleTimeRangeChange('30d')}
-                  >
-                    30 Days
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    textValue="90d"
-                    className="hover:bg-[rgba(255,255,255,0.1)] cursor-pointer text-gray-300 hover:text-white font-share-tech-mono"
-                    onClick={() => handleTimeRangeChange('90d')}
-                  >
-                    90 Days
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            <div className="relative flex-1 sm:flex-none">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild className="w-full sm:w-36 cursor-pointer">
-                  <button className="appearance-none flex flex-row gap-2 justify-between items-center px-3 py-2.5 sm:py-3 w-full sm:w-36 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-none text-xs sm:text-sm text-white hover:bg-[rgba(255,255,255,0.1)] focus:outline-none focus:border-[#d08700] font-share-tech-mono uppercase">
-                    <span className="capitalize truncate">
-                      {tag ? `${TAG_ICONS[tag] ?? ''} ${tag}` : 'Tags'}
-                    </span>
-                    <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400 shrink-0" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-48 bg-[#000000] border border-[rgba(255,255,255,0.1)]">
-                  {TAG_OPTIONS.map((option) => (
-                    <DropdownMenuItem
-                      key={option}
-                      textValue={option}
-                      className={`hover:bg-[rgba(255,255,255,0.1)] cursor-pointer text-gray-300 hover:text-white font-share-tech-mono ${tag === option ? 'bg-[rgba(208,135,0,0.1)] text-[#d08700]' : ''}`}
-                      onClick={() => handleTagChange(option)}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>{TAG_ICONS[option]}</span>
-                        <span className="capitalize">{option}</span>
+                  MY TOKENS
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="vault"
+                  className="data-[state=active]:bg-[#d08700] data-[state=active]:text-black text-gray-400 font-rajdhani font-bold text-xs sm:text-sm px-3 sm:px-4 py-1.5"
+                >
+                  MY TICKET VAULT
+                </TabsTrigger>
+              </TabsList>
+            <TabsContent value="tokens" className="mt-4">
+              <div className="flex flex-col gap-2 mb-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search your tokens..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-none text-base font-medium text-white placeholder-gray-500 focus:outline-none focus:border-[#d08700] font-rajdhani"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={clearSearch}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                    {isSearching && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#d08700]"></div>
                       </div>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        </div>
+                    )}
+                  </div>
+                </div>
 
-        {(selectedTimeRange !== 'all' || tag) && (
-          <div className="flex flex-wrap items-center gap-2 mb-4 md:mb-6">
-            {selectedTimeRange !== 'all' && (
-              <button
-                onClick={() => handleTimeRangeChange('all')}
-                className="inline-flex items-center gap-1.5 sm:gap-2 rounded-none border border-[rgba(208,135,0,0.5)] bg-[rgba(208,135,0,0.1)] px-2.5 sm:px-3 py-1 text-xs sm:text-sm text-[#d08700] transition hover:bg-[rgba(208,135,0,0.2)] cursor-pointer font-share-tech-mono uppercase"
-              >
-                <span>{getTimeRangeLabel(selectedTimeRange)}</span>
-                <X className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-              </button>
-            )}
-            {tag && (
-              <button
-                onClick={() => setTag(undefined)}
-                className="inline-flex items-center gap-1.5 sm:gap-2 rounded-none border border-[rgba(208,135,0,0.5)] bg-[rgba(208,135,0,0.1)] px-2.5 sm:px-3 py-1 text-xs sm:text-sm text-[#d08700] transition hover:bg-[rgba(208,135,0,0.2)] cursor-pointer font-share-tech-mono uppercase"
-              >
-                <span className="capitalize flex items-center gap-1 sm:gap-2">
-                  <span>{TAG_ICONS[tag]}</span>
-                  <span>{tag}</span>
-                </span>
-                <X className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-              </button>
-            )}
-            <button
-              onClick={handleClearFilters}
-              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-none border border-[rgba(255,255,255,0.1)] bg-transparent px-2.5 sm:px-3 py-1 text-xs sm:text-sm text-gray-400 transition hover:bg-[rgba(255,255,255,0.05)] hover:text-white cursor-pointer font-share-tech-mono uppercase"
-            >
-              Clear all
-            </button>
-          </div>
-        )}
+                {selectedTimeRange !== 'all' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => handleTimeRangeChange('all')}
+                      className="inline-flex items-center gap-1.5 sm:gap-2 rounded-none border border-[rgba(208,135,0,0.5)] bg-[rgba(208,135,0,0.1)] px-2.5 sm:px-3 py-1 text-xs sm:text-sm text-[#d08700] transition hover:bg-[rgba(208,135,0,0.2)] cursor-pointer font-rajdhani uppercase"
+                    >
+                      <span>{getTimeRangeLabel(selectedTimeRange)}</span>
+                      <X className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                    </button>
+                    <button
+                      onClick={handleClearFilters}
+                      className="inline-flex items-center gap-1.5 sm:gap-2 rounded-none border border-[rgba(255,255,255,0.1)] bg-transparent px-2.5 sm:px-3 py-1 text-xs sm:text-sm text-gray-400 transition hover:bg-[rgba(255,255,255,0.05)] hover:text-white cursor-pointer font-rajdhani uppercase"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                )}
+              </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8 pb-50">
-          {searchQuery.trim() && isSearching ? (
-            [...Array(6)].map((_, index) => <TokenCardSkeleton key={index} />)
-          ) : searchQuery.trim() && !isSearching && searchResults.length === 0 ? (
-            <div className="col-span-full flex flex-col items-center justify-center text-center px-4">
-              <NoTokensFound
-                searchQuery={searchQuery}
-                className="pt-3"
-                width="170px"
-                height="170px"
-                titleSize="text-[2rem]"
-                subTitleSize="text-base"
-              />
-            </div>
-          ) : (
-            displayTokens?.map((token: Token) => (
-              <MyTokenCard
-                key={token.id.toString()}
-                className="w-full lg:max-w-[400px]"
-                id={token.id.toString()}
-                user={publicKey}
-                mint={token.mintAddress || ''}
-                banner={token.metadata.bannerUri || ''}
-                avatar={token.metadata.tokenUri || ''}
-                name={token.name}
-                symbol={token.symbol}
-                description={token.description || ''}
-                decimals={parseFloat(token.decimals.toString())}
-                solPrice={solPrice}
-                actionButton={{
-                  text: `Buy $${token.symbol}`,
-                  variant: 'presale' as const,
-                }}
-              />
-            ))
-          )}
+              <div className="flex flex-col gap-4">
+                {searchQuery.trim() && isSearching ? (
+                  [...Array(3)].map((_, index) => <TokenCardSkeleton key={index} />)
+                ) : searchQuery.trim() && !isSearching && searchResults.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center text-center px-4 py-20">
+                    <NoTokensFound
+                      searchQuery={searchQuery}
+                      className="pt-3"
+                      width="170px"
+                      height="170px"
+                      titleSize="text-[2rem]"
+                      subTitleSize="text-base"
+                    />
+                  </div>
+                ) : (
+                  displayTokens?.map((token) => (
+                    <MyTokenCard
+                      key={token.address}
+                      className="w-full"
+                      id={token.address}
+                      user={publicKey}
+                      mint={token.tokenMint}
+                      decimals={token.decimals}
+                      totalSupply={token.totalSupply.toString()}
+                      tokenUri={token.tokenUri}
+                      name={token.tokenName}
+                      symbol={token.tokenSymbol}
+                      description={token.description || ''}
+                      pricePerToken={token.pricePerToken}
+                      amountToSell={token.amountToSell}
+                      minAmountToSell={token.minAmountToSell}
+                      totalClaimed={token.totalClaimed || 0}
+                      startTime={token.startTime.toString()}
+                      endTime={token.endTime.toString()}
+                    />
+                  ))
+                )}
+              </div>
+            </TabsContent>
+            <TabsContent value="vault" className="mt-4">
+              <TicketVaultContent />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>
