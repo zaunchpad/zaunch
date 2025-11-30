@@ -138,11 +138,13 @@ export default function ExploreTokenCard({
 
         <div className="absolute left-[21.67px] right-[21.66px] top-[21.67px] flex items-start justify-between">
           <div className="border border-[rgba(255,255,255,0.1)] rounded-[7px] w-14 h-14">
-            <motion.img
-              src={imageUrl || ''}
-              alt={name}
-              className="w-full h-full object-cover rounded-[7px]"
-            />
+            {imageUrl && (
+              <motion.img
+                src={imageUrl}
+                alt={name}
+                className="w-full h-full object-cover rounded-[7px]"
+              />
+            )}
           </div>
           <div
             className="border px-[11.167px] py-[4.167px]"
