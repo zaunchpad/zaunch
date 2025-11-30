@@ -1,18 +1,50 @@
+/**
+ * useNearIntents - React Hook for NEAR Intents
+ * 
+ * This hook provides a convenient way to use NEAR Intents in React components.
+ * It handles initialization and provides the NearIntents instance.
+ */
+
 import { useMemo } from 'react';
-import { ONECLICK_API_BASE_URL, ONECLICK_JWT_TOKEN } from '@/configs/env.config';
-import { NearIntents } from '@/lib/intents';
+import { createNearIntents, NearIntents } from '@/lib/intents';
 
 /**
- * Hook to initialize and use the NearIntents SDK
- * Creates a singleton instance of NearIntents for use throughout the app
+ * React hook that provides a NearIntents instance
+ * 
+ * Returns null if JWT token is not configured, allowing components to handle
+ * the missing dependency gracefully instead of crashing.
+ * 
+ * Usage:
+ * ```tsx
+ * const nearIntents = useNearIntents();
+ * 
+ * if (!nearIntents) {
+ *   // Handle missing configuration
+ *   return <div>NEAR Intents not configured</div>;
+ * }
+ * 
+ * const quote = await nearIntents.getPaymentQuote({
+ *   amount: "1000000000000000000000000",
+ *   paymentToken: "wNEAR",
+ *   receiveToken: "SOL",
+ *   recipientAddress: solanaAddress,
+ *   refundAddress: nearAddress
+ * });
+ * ```
  */
-export const useNearIntents = () => {
+export function useNearIntents(): NearIntents | null {
   const nearIntents = useMemo(() => {
-    if (!ONECLICK_JWT_TOKEN) {
-      console.warn('ONECLICK_JWT_TOKEN is not set. NearIntents functionality will be limited.');
+    try {
+      return createNearIntents();
+    } catch (error) {
+      console.warn('Failed to initialize NEAR Intents:', error);
+      // Return null instead of throwing to allow graceful degradation
+      // Components should check for null before using nearIntents
+      return null;
     }
-    return new NearIntents(ONECLICK_JWT_TOKEN, ONECLICK_API_BASE_URL);
   }, []);
 
   return nearIntents;
-};
+}
+
+export default useNearIntents;

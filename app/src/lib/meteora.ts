@@ -22,18 +22,36 @@ export async function calculateDbcSwapQuote(
 ): Promise<number> {
   try {
     const client = new DynamicBondingCurveClient(connection, 'confirmed');
-    const poolPubkey = new PublicKey(poolAddress);
-
-    // Fetch pool state
-    const virtualPoolState = await client.state.getPool(poolPubkey);
-    if (!virtualPoolState) {
-      throw new Error(`Pool not found: ${poolAddress}`);
+    let poolPubkey: PublicKey;
+    
+    try {
+      poolPubkey = new PublicKey(poolAddress);
+    } catch (error) {
+      throw new Error(`Invalid pool address: ${poolAddress}`);
     }
 
-    // Fetch pool config
-    const poolConfigState = await client.state.getPoolConfig(virtualPoolState.config);
-    if (!poolConfigState) {
-      throw new Error('Pool config not found');
+    // Fetch pool state
+    let virtualPoolState;
+    let poolConfigState;
+    
+    try {
+      virtualPoolState = await client.state.getPool(poolPubkey);
+      if (!virtualPoolState) {
+        throw new Error(`Pool not found: ${poolAddress}`);
+      }
+
+      // Fetch pool config
+      poolConfigState = await client.state.getPoolConfig(virtualPoolState.config);
+      if (!poolConfigState) {
+        throw new Error('Pool config not found');
+      }
+    } catch (error) {
+      // Handle invalid account discriminator errors
+      // This happens when the address is not a valid Meteora pool
+      if (error instanceof Error && (error.message.includes('discriminator') || error.message.includes('Invalid account'))) {
+        throw new Error(`Invalid pool: ${poolAddress} is not a valid Meteora pool`);
+      }
+      throw error;
     }
 
     const inputDecimals = swapBaseForQuote ? tokenDecimals : 9;
