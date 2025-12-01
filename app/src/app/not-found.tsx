@@ -4,14 +4,6 @@ export default function NotFoundPage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-4">
       <div className="flex flex-col items-center gap-6">
-        <div className="h-[380px] w-[380px] max-w-full" aria-hidden>
-          <img
-            src="/images/broken-pot.png"
-            alt="Broken pot illustration"
-            className="h-full w-full object-cover"
-          />
-        </div>
-
         <div className="flex flex-col items-center gap-4 text-center text-black">
           <h1 className="text-3xl font-semibold leading-[1.69] tracking-[-6.14%]">
             Page Not Found

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Token } from '@/types/token';
-import { getAllLaunches } from '@/lib/onchain-launch';
+import { getAllLaunches } from '@/lib/queries';
 
 
 interface UseOnChainTokensOptions {
