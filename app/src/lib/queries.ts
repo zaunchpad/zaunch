@@ -3,65 +3,57 @@ import {
   PublicKey
 } from '@solana/web3.js';
 import { Token } from '@/types/token';
+import { getRpcSOLEndpoint } from './sol';
 
 export const PROGRAM_ID = new PublicKey('HDFv1zjKQzvHuNJeH7D6A8DFKAxwJKw8X47qW4MYxYpA');
-
-
+export const CONNECTION = new Connection(getRpcSOLEndpoint(), 'confirmed');
 
 export interface RegistryData {
   launchPubkeys: PublicKey[];
   totalLaunches: number;
 }
 
-export function getRegistryPda(programId: PublicKey = PROGRAM_ID): PublicKey {
+export function getRegistryPda(): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
     [Buffer.from('registry_v2')],
-    programId
+    PROGRAM_ID
   );
   return pda;
 }
 
 export function getLaunchPda(
   creator: PublicKey,
-  launchName: string,
-  programId: PublicKey = PROGRAM_ID
+  launchName: string
 ): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
     [Buffer.from('launch'), creator.toBuffer(), Buffer.from(launchName)],
-    programId
+    PROGRAM_ID
   );
   return pda;
 }
 
 export function getVaultPda(
-  launchPda: PublicKey,
-  programId: PublicKey = PROGRAM_ID
+  launchPda: PublicKey
 ): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
     [Buffer.from('vault'), launchPda.toBuffer()],
-    programId
+    PROGRAM_ID
   );
   return pda;
 }
 
-export function getVkPda(
-  circuitId: string,
-  programId: PublicKey = PROGRAM_ID
-): PublicKey {
+export function getVkPda(circuitId: string): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
     [Buffer.from('verifying_key'), Buffer.from(circuitId)],
-    programId
+    PROGRAM_ID
   );
   return pda;
 }
 
 
-export async function getRegistry(
-  connection: Connection,
-  programId: PublicKey = PROGRAM_ID
-): Promise<RegistryData> {
-  const registryPda = getRegistryPda(programId);
-  const accountInfo = await connection.getAccountInfo(registryPda);
+export async function getRegistry(): Promise<RegistryData> {
+  const registryPda = getRegistryPda();
+  const accountInfo = await CONNECTION.getAccountInfo(registryPda);
   
   if (!accountInfo || accountInfo.data.length === 0) {
     return { launchPubkeys: [], totalLaunches: 0 };
@@ -84,10 +76,9 @@ export async function getRegistry(
 
 
 export async function getLaunchData(
-  connection: Connection,
   launchAddress: PublicKey
 ): Promise<Token | null> {
-  const accountInfo = await connection.getAccountInfo(launchAddress);
+  const accountInfo = await CONNECTION.getAccountInfo(launchAddress);
   
   if (!accountInfo || accountInfo.data.length === 0) {
     return null;
@@ -98,10 +89,9 @@ export async function getLaunchData(
 
 
 export async function getMultipleLaunches(
-  connection: Connection,
   launchAddresses: PublicKey[]
 ): Promise<(Token | null)[]> {
-  const accountInfos = await connection.getMultipleAccountsInfo(launchAddresses);
+  const accountInfos = await CONNECTION.getMultipleAccountsInfo(launchAddresses);
   
   return accountInfos.map((info, index) => {
     if (!info || info.data.length === 0) return null;
@@ -110,19 +100,16 @@ export async function getMultipleLaunches(
 }
 
 
-export async function getAllLaunches(
-  connection: Connection,
-  programId: PublicKey = PROGRAM_ID
-): Promise<Token[]> {
+export async function getAllLaunches(): Promise<Token[]> {
   // Step 1: Get all launch addresses from registry (1 RPC call)
-  const registry = await getRegistry(connection, programId);
+  const registry = await getRegistry();
   
   if (registry.launchPubkeys.length === 0) {
     return [];
   }
   
   // Step 2: Batch fetch all launch accounts (1 RPC call)
-  const launches = await getMultipleLaunches(connection, registry.launchPubkeys);
+  const launches = await getMultipleLaunches(registry.launchPubkeys);
   
   // Filter out nulls
   return launches.filter((l): l is Token => l !== null);
@@ -130,11 +117,9 @@ export async function getAllLaunches(
 
 
 export async function getRecentLaunches(
-  connection: Connection,
-  count: number = 10,
-  programId: PublicKey = PROGRAM_ID
+  count: number = 10
 ): Promise<Token[]> {
-  const registry = await getRegistry(connection, programId);
+  const registry = await getRegistry();
   
   // Get last N addresses
   const recentAddresses = registry.launchPubkeys.slice(-count);
@@ -143,24 +128,17 @@ export async function getRecentLaunches(
     return [];
   }
   
-  const launches = await getMultipleLaunches(connection, recentAddresses);
+  const launches = await getMultipleLaunches(recentAddresses);
   return launches.filter((l): l is Token => l !== null);
 }
 
-export async function getLaunchesByCreator(
-  connection: Connection,
-  creator: PublicKey,
-  programId: PublicKey = PROGRAM_ID
-): Promise<Token[]> {
-  const allLaunches = await getAllLaunches(connection, programId);
+export async function getLaunchesByCreator(creator: PublicKey): Promise<Token[]> {
+  const allLaunches = await getAllLaunches();
   return allLaunches.filter(l => l.creator === creator.toBase58());
 }
 
-export async function getActiveLaunches(
-  connection: Connection,
-  programId: PublicKey = PROGRAM_ID
-): Promise<Token[]> {
-  const allLaunches = await getAllLaunches(connection, programId);
+export async function getActiveLaunches(): Promise<Token[]> {
+  const allLaunches = await getAllLaunches();
   return allLaunches.filter(l => l.isActive);
 }
 

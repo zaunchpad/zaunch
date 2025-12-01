@@ -196,9 +196,6 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
             </div>
           </div>
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-            <div className="w-48 h-48 md:w-64 md:h-64 mb-6 flex items-center justify-center">
-              <img src="/images/broken-pot.png" alt="Not Found" />
-            </div>
             <h3 className="text-lg md:text-xl font-semibold text-gray-300 mb-2 font-rajdhani">
               Solana wallet not connected
             </h3>
