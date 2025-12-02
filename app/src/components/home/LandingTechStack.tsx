@@ -8,6 +8,7 @@ interface TechStack {
   logo: string;
   width: number;
   height?: number;
+  url?: string;
 }
 
 const techStack: TechStack[] = [
@@ -16,6 +17,7 @@ const techStack: TechStack[] = [
     description: 'Settles into shielded pools and price in Zcash.',
     logo: '/logos/zcash.png',
     width: 44,
+    url: 'https://z.cash',
   },
   {
     name: 'NEAR Intents',
@@ -23,6 +25,7 @@ const techStack: TechStack[] = [
       'Cross-chain swaps to deposits in any chains and from Zcash shielded pools to Solana',
     logo: '/logos/near-intents.svg',
     width: 141,
+    url: 'https://near-intents.org',
   },
   {
     name: 'Solana',
@@ -30,6 +33,7 @@ const techStack: TechStack[] = [
     logo: '/logos/solana-text.svg',
     width: 141,
     height: 25,
+    url: 'https://solana.com',
   },
   {
     name: 'LayerZero',
@@ -40,9 +44,10 @@ const techStack: TechStack[] = [
   },
   {
     name: 'Meteora',
-    description: 'Launchpad infrastructure on Solana',
+    description: 'Liquidity deployment for SPL tokens',
     logo: '/logos/meteora.png',
     width: 43,
+    url: 'https://meteora.ag',
   },
   {
     name: 'TukTuk by Helium',
@@ -50,6 +55,7 @@ const techStack: TechStack[] = [
       'Solana automation framework for taking Solana liquidity and putting into Meteora contracts',
     logo: '/logos/tuktuk.png',
     width: 48,
+    url: 'https://www.tuktuk.fun'
   },
 ];
 
@@ -77,40 +83,59 @@ export default function LandingTechStack() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {techStack.map((tech: TechStack, index: number) => (
-            <motion.div
-              key={tech.name}
-              initial={{ opacity: 0, scale: 0.95 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.05, duration: 0.4 }}
-              className="group relative min-h-[180px] border border-white/10 bg-black/50 backdrop-blur-sm p-6 flex flex-col items-center justify-center text-center gap-4"
-            >
-              {/* Corner Accents */}
-              <div className="absolute top-0 left-0 w-3 h-3 border-t border-l border-[#eab308] opacity-0 group-hover:opacity-100 transition-opacity" />
-              <div className="absolute top-0 right-0 w-3 h-3 border-t border-r border-[#eab308] opacity-0 group-hover:opacity-100 transition-opacity" />
-              <div className="absolute bottom-0 left-0 w-3 h-3 border-b border-l border-white opacity-0 group-hover:opacity-100 transition-opacity" />
-              <div className="absolute bottom-0 right-0 w-3 h-3 border-b border-r border-white opacity-0 group-hover:opacity-100 transition-opacity" />
+          {techStack.map((tech: TechStack, index: number) => {
+            const CardContent = (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.05, duration: 0.4 }}
+                className={`group relative min-h-[180px] border border-white/10 bg-black/50 backdrop-blur-sm p-6 flex flex-col items-center justify-center text-center gap-4 ${
+                  tech.url ? 'cursor-pointer hover:border-[#d08700]/50 transition-colors' : ''
+                }`}
+              >
+                {/* Corner Accents */}
+                <div className="absolute top-0 left-0 w-3 h-3 border-t border-l border-[#eab308] opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute top-0 right-0 w-3 h-3 border-t border-r border-[#eab308] opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute bottom-0 left-0 w-3 h-3 border-b border-l border-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute bottom-0 right-0 w-3 h-3 border-b border-r border-white opacity-0 group-hover:opacity-100 transition-opacity" />
 
-              <div className="h-10 flex items-center justify-center">
-                <img
-                  src={tech.logo}
-                  alt={tech.name}
-                  style={{ width: tech.width * 0.9, height: tech.height && tech.height * 0.9 }}
-                  className="h-full object-contain filter brightness-100 grayscale-0"
-                />
-              </div>
+                <div className="h-10 flex items-center justify-center">
+                  <img
+                    src={tech.logo}
+                    alt={tech.name}
+                    style={{ width: tech.width * 0.9, height: tech.height && tech.height * 0.9 }}
+                    className="h-full object-contain filter brightness-100 grayscale-0"
+                  />
+                </div>
 
-              <div>
-                <h3 className="font-rajdhani font-bold text-xl text-[#feeae6] mb-1.5">
-                  {tech.name}
-                </h3>
-                <p className="font-rajdhani font-normal text-sm text-[#feeae6]/80 leading-relaxed">
-                  {tech.description}
-                </p>
-              </div>
-            </motion.div>
-          ))}
+                <div>
+                  <h3 className="font-rajdhani font-bold text-xl text-[#feeae6] mb-1.5">
+                    {tech.name}
+                  </h3>
+                  <p className="font-rajdhani font-normal text-sm text-[#feeae6]/80 leading-relaxed">
+                    {tech.description}
+                  </p>
+                </div>
+              </motion.div>
+            );
+
+            if (tech.url) {
+              return (
+                <a
+                  key={tech.name}
+                  href={tech.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block"
+                >
+                  {CardContent}
+                </a>
+              );
+            }
+
+            return <div key={tech.name}>{CardContent}</div>;
+          })}
         </div>
       </div>
     </section>

@@ -924,7 +924,7 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
               <div className="font-rajdhani font-bold text-sm text-[#79767d] uppercase">
                 PAYABLE AMOUNT
               </div>
-              <div className="font-rajdhani font-bold text-[22px] text-[#79767d] leading-[28px]">
+              <div className="font-rajdhani font-bold text-[18px] text-[#79767d] leading-[28px]">
                 {depositState.depositAmount ? `${depositState.depositAmount} NEAR` : '0 NEAR'}
               </div>
             </div>
@@ -933,7 +933,7 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
             <div className="font-rajdhani font-bold text-sm text-[#79767d] uppercase">
               TICKETS GENERATED
             </div>
-            <div className="font-rajdhani font-bold text-[22px] text-[#79767d] leading-[28px]">
+            <div className="font-rajdhani font-bold text-[18px] text-[#79767d] leading-[28px]">
               1 TICKET
             </div>
           </div>

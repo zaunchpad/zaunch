@@ -1,6 +1,5 @@
 'use client';
 
-import { useWalletSelector } from '@near-wallet-selector/react-hook';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { ChevronDown, ChevronRight, Copy, Info, Power, X } from 'lucide-react';
 import type React from 'react';
@@ -9,8 +8,7 @@ import { toast } from 'sonner';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { NEAR_NETWORK, SOL_NETWORK } from '@/configs/env.config';
-import { formatBalanceNear, getAllTokenOnNear, getNearBalance, getNearPrice } from '@/lib/near';
+import { SOL_NETWORK } from '@/configs/env.config';
 import {
   getAllTokens as getAllSolTokens,
   getSolBalance,
@@ -34,7 +32,7 @@ interface TokenAsset {
 }
 
 interface ConnectedWallet {
-  type: 'solana' | 'near';
+  type: 'solana';
   address: string;
   displayName: string;
   balance?: string;
@@ -43,57 +41,27 @@ interface ConnectedWallet {
   network?: string;
 }
 
-interface WalletBalance {
-  solana: number;
-  near: number;
-}
-
 const WalletSidebar: React.FC<WalletSidebarProps> = ({ isOpen, onClose, onConnectAnother }) => {
   const { publicKey, connected: solanaConnected, disconnect: disconnectSolana } = useWallet();
-  const { signOut, signedAccountId } = useWalletSelector();
 
-  const [walletBalances, setWalletBalances] = useState<WalletBalance>({
-    solana: 0,
-    near: 0,
-  });
+  const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
   const [expandedWallets, setExpandedWallets] = useState<Set<string>>(new Set());
-  const [walletTokens, setWalletTokens] = useState<{
-    solana: TokenAsset[];
-    near: TokenAsset[];
-  }>({
-    solana: [],
-    near: [],
-  });
+  const [walletTokens, setWalletTokens] = useState<TokenAsset[]>([]);
 
   const getConnectedWallets = (): ConnectedWallet[] => {
     const wallets: ConnectedWallet[] = [];
 
     if (solanaConnected && publicKey) {
-      const solBalance = walletBalances.solana;
-      const nativeBalance = walletTokens.solana.find((t) => t.symbol === 'SOL')?.balance || '0';
+      const nativeBalance = walletTokens.find((t) => t.symbol === 'SOL')?.balance || '0';
       wallets.push({
         type: 'solana',
         address: publicKey.toString(),
         displayName: 'Solana Wallet',
-        balance: solBalance.toFixed(2),
+        balance: walletBalance.toFixed(2),
         nativeBalance,
-        tokens: walletTokens.solana,
+        tokens: walletTokens,
         network: SOL_NETWORK || 'devnet',
-      });
-    }
-
-    if (signedAccountId) {
-      const nearBalance = walletBalances.near;
-      const nativeBalance = walletTokens.near.find((t) => t.symbol === 'NEAR')?.balance || '0';
-      wallets.push({
-        type: 'near',
-        address: signedAccountId,
-        displayName: 'NEAR Wallet',
-        balance: nearBalance.toFixed(2),
-        nativeBalance,
-        tokens: walletTokens.near,
-        network: NEAR_NETWORK || 'testnet',
       });
     }
 
@@ -103,18 +71,8 @@ const WalletSidebar: React.FC<WalletSidebarProps> = ({ isOpen, onClose, onConnec
   const fetchBalances = async () => {
     setIsLoadingBalances(true);
     try {
-      const newBalances: WalletBalance = {
-        solana: 0,
-        near: 0,
-      };
-
-      const newTokens: {
-        solana: TokenAsset[];
-        near: TokenAsset[];
-      } = {
-        solana: [],
-        near: [],
-      };
+      let newBalance = 0;
+      const newTokens: TokenAsset[] = [];
 
       // Fetch Solana balance and tokens
       if (solanaConnected && publicKey) {
@@ -126,7 +84,7 @@ const WalletSidebar: React.FC<WalletSidebarProps> = ({ isOpen, onClose, onConnec
           ]);
 
           // Add native SOL as first token
-          newTokens.solana.push({
+          newTokens.push({
             name: 'Solana',
             symbol: 'SOL',
             balance: solBalance.toFixed(4),
@@ -135,7 +93,7 @@ const WalletSidebar: React.FC<WalletSidebarProps> = ({ isOpen, onClose, onConnec
 
           // Add other tokens
           solTokens.forEach((token) => {
-            newTokens.solana.push({
+            newTokens.push({
               name: token.name,
               symbol: token.symbol,
               balance: token.balance.toFixed(4),
@@ -144,48 +102,13 @@ const WalletSidebar: React.FC<WalletSidebarProps> = ({ isOpen, onClose, onConnec
             });
           });
 
-          newBalances.solana = solBalance * (solPrice || 0);
+          newBalance = solBalance * (solPrice || 0);
         } catch (error) {
           console.error('Error fetching Solana balance:', error);
         }
       }
 
-      // Fetch NEAR balance and tokens
-      if (signedAccountId) {
-        try {
-          const [nearBalance, nearPrice, nearTokens] = await Promise.all([
-            getNearBalance(signedAccountId),
-            getNearPrice(),
-            getAllTokenOnNear(signedAccountId).catch(() => []),
-          ]);
-
-          // Add native NEAR as first token
-          newTokens.near.push({
-            name: 'NEAR',
-            symbol: 'NEAR',
-            balance: nearBalance,
-            usdValue: parseFloat(nearBalance) * (nearPrice || 0),
-          });
-
-          // Add other tokens
-          nearTokens.forEach((token: any) => {
-            const formattedBalance = formatBalanceNear(token.amount);
-            newTokens.near.push({
-              name: token.ft_meta?.name || token.contract,
-              symbol: token.ft_meta?.symbol || 'Unknown',
-              balance: formattedBalance,
-              logo: token.ft_meta?.icon,
-              usdValue: 0,
-            });
-          });
-
-          newBalances.near = parseFloat(nearBalance) * (nearPrice || 0);
-        } catch (error) {
-          console.error('Error fetching NEAR balance:', error);
-        }
-      }
-
-      setWalletBalances(newBalances);
+      setWalletBalance(newBalance);
       setWalletTokens(newTokens);
     } catch (error) {
       console.error('Error fetching balances:', error);
@@ -198,7 +121,7 @@ const WalletSidebar: React.FC<WalletSidebarProps> = ({ isOpen, onClose, onConnec
     if (isOpen) {
       fetchBalances();
     }
-  }, [isOpen, solanaConnected, signedAccountId, publicKey]);
+  }, [isOpen, solanaConnected, publicKey]);
 
   useEffect(() => {
     if (isOpen) {
@@ -230,7 +153,7 @@ const WalletSidebar: React.FC<WalletSidebarProps> = ({ isOpen, onClose, onConnec
   }, [isOpen]);
 
   const getTotalBalance = (): number => {
-    return walletBalances.solana + walletBalances.near;
+    return walletBalance;
   };
 
   const handleCopyAddress = async (address: string) => {
@@ -242,39 +165,15 @@ const WalletSidebar: React.FC<WalletSidebarProps> = ({ isOpen, onClose, onConnec
     }
   };
 
-  const handleDisconnectWallet = async (walletType: 'solana' | 'near') => {
-    switch (walletType) {
-      case 'solana':
-        disconnectSolana();
-        break;
-      case 'near':
-        if (signedAccountId) {
-          try {
-            await signOut();
-          } catch (error) {
-            console.error('Failed to disconnect NEAR wallet:', error);
-            toast.error('Failed to disconnect NEAR wallet');
-          }
-        }
-        break;
-    }
+  const handleDisconnectWallet = () => {
+    disconnectSolana();
   };
 
-  const getWalletIcon = (type: 'solana' | 'near') => {
-    switch (type) {
-      case 'solana':
-        return '/chains/solana.svg';
-      case 'near':
-        return '/chains/near.png';
-      default:
-        return '/chains/near.png';
-    }
+  const getWalletIcon = () => {
+    return '/chains/solana_light.svg';
   };
 
   const getWalletDisplayName = (wallet: ConnectedWallet) => {
-    if (wallet.type === 'near') {
-      return wallet.address;
-    }
     return `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
   };
 
@@ -350,7 +249,7 @@ const WalletSidebar: React.FC<WalletSidebarProps> = ({ isOpen, onClose, onConnec
                       <div className="flex items-center space-x-3 flex-1 min-w-0">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
                           <img
-                            src={getWalletIcon(wallet.type)}
+                            src={getWalletIcon()}
                             alt={wallet.displayName}
                             className="w-6 h-6 object-contain"
                           />
@@ -406,7 +305,7 @@ const WalletSidebar: React.FC<WalletSidebarProps> = ({ isOpen, onClose, onConnec
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              onClick={() => handleDisconnectWallet(wallet.type)}
+                              onClick={handleDisconnectWallet}
                               className="p-1 hover:bg-red-900/30 rounded transition-colors cursor-pointer"
                             >
                               <Power className="w-4 h-4 text-red-500" />
@@ -479,8 +378,7 @@ const WalletSidebar: React.FC<WalletSidebarProps> = ({ isOpen, onClose, onConnec
                   <TooltipContent className="max-w-xs border border-gray-800 bg-[#000000] text-white">
                     <div className="space-y-2">
                       <p className="text-xs text-gray-300">
-                        Total Balance shows the combined USD value of all your connected wallets
-                        across Solana and NEAR chains
+                        Total Balance shows the USD value of your Solana wallet
                       </p>
                     </div>
                   </TooltipContent>

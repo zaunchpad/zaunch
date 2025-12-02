@@ -1,15 +1,18 @@
 'use client';
 
 import { useWallet } from '@solana/wallet-adapter-react';
+import { PublicKey } from '@solana/web3.js';
 import { CalendarClock, Info, Lock } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import TokenCreationModal from '@/components/ui/token-creation-modal';
 import TokenSuccessModal from '@/components/ui/token-success-modal';
 import URLInput from '@/components/ui/url-input';
+import { useCryptoPrices } from '@/hooks/useCryptoPrices';
 import { useDeployToken } from '@/hooks/useDeployToken';
+import { getTokenInfo } from '@/lib/sol';
 import { getIpfsUrl } from '@/lib/utils';
 
 interface QuickLaunchProps {
@@ -21,6 +24,7 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
   const router = useRouter();
   const { publicKey } = walletSol;
   const { deployToken, deployWithExistingToken } = useDeployToken();
+  const { prices } = useCryptoPrices();
 
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isExistingToken, setIsExistingToken] = useState(false);
@@ -50,6 +54,19 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState<boolean>(false);
 
+  // State for token preview
+  const [tokenPreview, setTokenPreview] = useState<{
+    name: string;
+    symbol: string;
+    image?: string;
+    description?: string;
+    website?: string;
+    twitter?: string;
+    telegram?: string;
+    decimals: number;
+  } | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState<boolean>(false);
+
   // Validation function for website URL
   const isWebsiteValid = useMemo(() => {
     if (!formData.websiteUrl || !formData.websiteUrl.trim()) return true;
@@ -63,6 +80,13 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
     return domainRegex.test(withoutProto);
   }, [formData.websiteUrl]);
 
+  // Get website validation error message
+  const websiteErrorMessage = useMemo(() => {
+    if (!formData.websiteUrl || !formData.websiteUrl.trim()) return null;
+    if (isWebsiteValid) return null;
+    return 'Please enter a valid website URL (e.g., example.com)';
+  }, [formData.websiteUrl, isWebsiteValid]);
+
   // Validation function for Twitter URL
   const isTwitterValid = useMemo(() => {
     if (!formData.twitterUrl || !formData.twitterUrl.trim()) return true;
@@ -71,8 +95,22 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
     const raw = trimmed.replace(/^https?:\/\//, '').replace(/^(x\.com|twitter\.com)\//, '');
     const username = raw.replace(/[^A-Za-z0-9_]/g, '');
 
-    return username.length > 0 && username.length <= 15 && /^[A-Za-z0-9_]+$/.test(username);
+    if (username.length === 0) return false;
+    if (username.length > 15) return false;
+    return /^[A-Za-z0-9_]+$/.test(username);
   }, [formData.twitterUrl]);
+
+  // Get Twitter validation error message
+  const twitterErrorMessage = useMemo(() => {
+    if (!formData.twitterUrl || !formData.twitterUrl.trim()) return null;
+    if (isTwitterValid) return null;
+    const trimmed = formData.twitterUrl.trim();
+    const raw = trimmed.replace(/^https?:\/\//, '').replace(/^(x\.com|twitter\.com)\//, '');
+    const username = raw.replace(/[^A-Za-z0-9_]/g, '');
+    if (username.length === 0) return 'Please enter a valid Twitter username';
+    if (username.length > 15) return 'Twitter username must be 15 characters or less';
+    return 'Invalid Twitter username format';
+  }, [formData.twitterUrl, isTwitterValid]);
 
   // Validation function for Telegram URL
   const isTelegramValid = useMemo(() => {
@@ -86,6 +124,222 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
 
     return handle.length >= 5 && handle.length <= 32;
   }, [formData.telegramUrl]);
+
+  // Get Telegram validation error message
+  const telegramErrorMessage = useMemo(() => {
+    if (!formData.telegramUrl || !formData.telegramUrl.trim()) return null;
+    if (isTelegramValid) return null;
+    const trimmed = formData.telegramUrl.trim();
+    const raw = trimmed
+      .replace(/^https?:\/\//, '')
+      .replace(/^(t\.me|telegram\.me|telegram\.org)\//, '');
+    const handle = raw.replace(/[^A-Za-z0-9_]/g, '');
+    if (handle.length < 5) return 'Telegram handle must be at least 5 characters';
+    if (handle.length > 32) return 'Telegram handle must be 32 characters or less';
+    return 'Invalid Telegram handle format';
+  }, [formData.telegramUrl, isTelegramValid]);
+
+  // Validation function for Token Mint Address
+  const isMintAddressValid = useMemo(() => {
+    if (!isExistingToken) return true;
+    if (!formData.existingMintAddress || !formData.existingMintAddress.trim()) return true;
+
+    const trimmed = formData.existingMintAddress.trim();
+    
+    // Basic length check
+    if (trimmed.length < 32 || trimmed.length > 44) {
+      return false;
+    }
+
+    // Validate using Solana PublicKey
+    try {
+      const publicKey = new PublicKey(trimmed);
+      // Check if it's a valid on-curve point
+      return PublicKey.isOnCurve(publicKey);
+    } catch {
+      return false;
+    }
+  }, [formData.existingMintAddress, isExistingToken]);
+
+  // Get mint address validation error message
+  const mintAddressErrorMessage = useMemo(() => {
+    if (!isExistingToken) return null;
+    if (!formData.existingMintAddress || !formData.existingMintAddress.trim()) return null;
+    if (isMintAddressValid) return null;
+    const trimmed = formData.existingMintAddress.trim();
+    if (trimmed.length < 32 || trimmed.length > 44) {
+      return 'Token mint address must be between 32 and 44 characters';
+    }
+    return 'Invalid Solana mint address format';
+  }, [formData.existingMintAddress, isMintAddressValid, isExistingToken]);
+
+  // Get minimum datetime (now) for date inputs
+  const getMinDateTime = useCallback(() => {
+    const now = new Date();
+    // Convert to local datetime string format (YYYY-MM-DDTHH:mm)
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }, []);
+
+  // Get minimum datetime for end time (start time + 1 hour)
+  const getMinEndDateTime = useCallback(() => {
+    if (!formData.saleStartTime) return getMinDateTime();
+    const startTime = new Date(formData.saleStartTime);
+    const minEndTime = new Date(startTime.getTime() + 60 * 60 * 1000); // Add 1 hour
+    // Convert to local datetime string format
+    const year = minEndTime.getFullYear();
+    const month = String(minEndTime.getMonth() + 1).padStart(2, '0');
+    const day = String(minEndTime.getDate()).padStart(2, '0');
+    const hours = String(minEndTime.getHours()).padStart(2, '0');
+    const minutes = String(minEndTime.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }, [formData.saleStartTime, getMinDateTime]);
+
+  // Get minimum datetime for claim opening time (end time + 1 second)
+  const getMinClaimDateTime = useCallback(() => {
+    if (!formData.saleEndTime) return getMinDateTime();
+    const endTime = new Date(formData.saleEndTime);
+    const minClaimTime = new Date(endTime.getTime() + 1000); // Just after end time
+    // Convert to local datetime string format
+    const year = minClaimTime.getFullYear();
+    const month = String(minClaimTime.getMonth() + 1).padStart(2, '0');
+    const day = String(minClaimTime.getDate()).padStart(2, '0');
+    const hours = String(minClaimTime.getHours()).padStart(2, '0');
+    const minutes = String(minClaimTime.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }, [formData.saleEndTime, getMinDateTime]);
+
+  // Validate date ranges
+  const dateValidationErrors = useMemo(() => {
+    const errors: {
+      saleEndTime?: string;
+      claimOpeningTime?: string;
+    } = {};
+
+    if (formData.saleStartTime && formData.saleEndTime) {
+      const startTime = new Date(formData.saleStartTime).getTime();
+      const endTime = new Date(formData.saleEndTime).getTime();
+      const now = Date.now();
+
+      if (startTime < now) {
+        // This will be handled by min attribute, but we can show a message
+      }
+
+      if (endTime <= startTime) {
+        errors.saleEndTime = 'Sale end time must be after start time';
+      } else {
+        const duration = endTime - startTime;
+        const oneHour = 60 * 60 * 1000;
+        if (duration < oneHour) {
+          errors.saleEndTime = 'Sale duration must be at least 1 hour';
+        }
+      }
+    }
+
+    if (formData.claimType === 'scheduled' && formData.saleEndTime && formData.claimOpeningTime) {
+      const endTime = new Date(formData.saleEndTime).getTime();
+      const claimTime = new Date(formData.claimOpeningTime).getTime();
+
+      if (claimTime <= endTime) {
+        errors.claimOpeningTime = 'Claim opening time must be after sale end time';
+      }
+    }
+
+    return errors;
+  }, [formData.saleStartTime, formData.saleEndTime, formData.claimOpeningTime, formData.claimType]);
+
+  // Calculate USD price for price per token
+  const pricePerTokenUSD = useMemo(() => {
+    if (!formData.pricePerToken || !prices.solana) return null;
+    const price = parseFloat(formData.pricePerToken);
+    if (isNaN(price)) return null;
+    return price * prices.solana;
+  }, [formData.pricePerToken, prices.solana]);
+
+  // Fetch token preview when mint address is valid
+  useEffect(() => {
+    const fetchTokenPreview = async () => {
+      if (!isExistingToken || !isMintAddressValid || !formData.existingMintAddress.trim()) {
+        setTokenPreview(null);
+        setIsLoadingPreview(false);
+        return;
+      }
+
+      const trimmed = formData.existingMintAddress.trim();
+      setIsLoadingPreview(true);
+      setTokenPreview(null);
+
+      try {
+        const tokenInfo = await getTokenInfo(trimmed);
+        if (tokenInfo) {
+          setTokenPreview(tokenInfo);
+          // Auto-fill form fields with token info
+          setFormData((prev) => {
+            const updates: Partial<typeof prev> = {};
+            // Auto-fill name if empty
+            if (!prev.tokenName.trim()) {
+              updates.tokenName = tokenInfo.name;
+            }
+            // Auto-fill symbol if empty
+            if (!prev.tokenSymbol.trim()) {
+              updates.tokenSymbol = tokenInfo.symbol;
+            }
+            // Auto-fill description if empty and available
+            if (!prev.description.trim() && tokenInfo.description) {
+              updates.description = tokenInfo.description;
+            }
+            // Auto-fill decimals if not already set or is default
+            if (!prev.decimal || prev.decimal === '6') {
+              updates.decimal = tokenInfo.decimals.toString();
+            }
+            // Auto-fill website if empty and available
+            if (!prev.websiteUrl.trim() && tokenInfo.website) {
+              updates.websiteUrl = tokenInfo.website;
+            }
+            // Auto-fill twitter if empty and available
+            if (!prev.twitterUrl.trim() && tokenInfo.twitter) {
+              updates.twitterUrl = tokenInfo.twitter;
+            }
+            // Auto-fill telegram if empty and available
+            if (!prev.telegramUrl.trim() && tokenInfo.telegram) {
+              updates.telegramUrl = tokenInfo.telegram;
+            }
+            return { ...prev, ...updates };
+          });
+          // Auto-fill logo if available and not already set
+          if (tokenInfo.image && !logoUrl) {
+            setLogoUrl(tokenInfo.image);
+          }
+        } else {
+          setTokenPreview(null);
+        }
+      } catch (error) {
+        console.error('Error fetching token preview:', error);
+        setTokenPreview(null);
+      } finally {
+        setIsLoadingPreview(false);
+      }
+    };
+
+    // Debounce the fetch
+    const timeoutId = setTimeout(() => {
+      fetchTokenPreview();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.existingMintAddress, isMintAddressValid, isExistingToken]);
+
+  // Clear preview when existing token toggle is turned off
+  useEffect(() => {
+    if (!isExistingToken) {
+      setTokenPreview(null);
+      setIsLoadingPreview(false);
+    }
+  }, [isExistingToken]);
 
   const [isDeploying, setIsDeploying] = useState<boolean>(false);
   const [isNavigating, setIsNavigating] = useState<boolean>(false);
@@ -336,6 +590,20 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
         return;
       }
 
+      // Validate social URLs
+      if (formData.twitterUrl && !isTwitterValid) {
+        toast.error('Please fix the Twitter URL format');
+        return;
+      }
+      if (formData.telegramUrl && !isTelegramValid) {
+        toast.error('Please fix the Telegram URL format');
+        return;
+      }
+      if (formData.websiteUrl && !isWebsiteValid) {
+        toast.error('Please fix the Website URL format');
+        return;
+      }
+
       if (isExistingToken) {
         // Validate existing token fields
         if (!formData.existingMintAddress.trim()) {
@@ -344,17 +612,27 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
         }
 
         // Validate Solana public key format
+        const trimmed = formData.existingMintAddress.trim();
+        
+        // Basic length check
+        if (trimmed.length < 32 || trimmed.length > 44) {
+          toast.error('Token mint address must be between 32 and 44 characters');
+          return;
+        }
+
+        // Validate using Solana PublicKey
         try {
-          // This will throw if invalid
-          const _ = formData.existingMintAddress.length;
-          if (
-            formData.existingMintAddress.length < 32 ||
-            formData.existingMintAddress.length > 44
-          ) {
-            throw new Error('Invalid length');
+          const publicKey = new PublicKey(trimmed);
+          if (!PublicKey.isOnCurve(publicKey)) {
+            toast.error('Invalid token mint address: not a valid Solana public key');
+            return;
           }
-        } catch {
-          toast.error('Invalid token mint address format');
+        } catch (error) {
+          toast.error(
+            error instanceof Error
+              ? `Invalid token mint address: ${error.message}`
+              : 'Invalid token mint address format',
+          );
           return;
         }
 
@@ -425,20 +703,43 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
     const now = Date.now();
 
     if (startTime < now) {
-      // Allow slightly past start times for UX, or strict?
-      // toast.error('Sale start time must be in the future');
+      toast.error('Sale start time must be in the future');
+      return;
     }
+
     if (endTime <= startTime) {
       toast.error('Sale end time must be after start time');
       return;
     }
 
+    // Check minimum duration of 1 hour
+    const duration = endTime - startTime;
+    const oneHour = 60 * 60 * 1000;
+    if (duration < oneHour) {
+      toast.error('Sale duration must be at least 1 hour');
+      return;
+    }
+
     if (formData.claimType === 'scheduled') {
-      const claimTime = new Date(formData.claimOpeningTime).getTime();
-      if (claimTime < endTime) {
-        toast.error('Claim time must be after sale end time');
+      if (!formData.claimOpeningTime) {
+        toast.error('Claim opening time is required');
         return;
       }
+      const claimTime = new Date(formData.claimOpeningTime).getTime();
+      if (claimTime <= endTime) {
+        toast.error('Claim opening time must be after sale end time');
+        return;
+      }
+    }
+
+    // Check for date validation errors
+    if (dateValidationErrors.saleEndTime) {
+      toast.error(dateValidationErrors.saleEndTime);
+      return;
+    }
+    if (dateValidationErrors.claimOpeningTime) {
+      toast.error(dateValidationErrors.claimOpeningTime);
+      return;
     }
 
     executeDeployment();
@@ -643,16 +944,13 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
         onClose={handleSuccessModalClose}
         onViewToken={handleViewToken}
       />
-      {/* LoadingOverlay removed for redirection as per request */}
 
       <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-10 py-10">
-        {/* Header Section */}
         <div className="w-full flex flex-col gap-5 items-center">
           <h1 className="text-[30px] font-bold text-white text-center font-['Space_Grotesk'] leading-9">
             Deploy <span className="text-[#d08700]">New Launch</span>
           </h1>
 
-          {/* Steps Indicator */}
           <div className="flex gap-2 justify-center items-center w-full">
             <div
               className={`text-[12px] font-consolas ${currentStep >= 1 ? 'text-yellow-500' : 'text-gray-500'}`}
@@ -663,18 +961,15 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
             <div
               className={`text-[12px] font-consolas ${currentStep >= 2 ? 'text-yellow-500' : 'text-gray-500'}`}
             >
-              02. SALES PARAMETERS
+              02. SALE PARAMETERS
             </div>
           </div>
         </div>
 
-        {/* Main Form Container */}
         <div className="max-w-[737px] w-full bg-neutral-950 border border-gray-800 p-8 rounded-lg shadow-lg">
           <div className="flex flex-col gap-8 w-full">
-            {/* Step 1: Project Details */}
             {currentStep === 1 && (
               <div className="flex flex-col gap-6 w-full animate-in fade-in slide-in-from-right-4">
-                {/* Row 1: Name & Symbol */}
                 <div className="flex gap-8 w-full">
                   <div className="flex-1 flex flex-col gap-2">
                     <label className="text-[14px] font-rajdhani font-bold text-[#79767d]">
@@ -705,16 +1000,31 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                   </div>
                 </div>
 
-                {/* Existing Token Toggle */}
                 <div className="w-full border border-[rgba(255,255,255,0.1)] rounded p-3.5">
                   <div
                     className="flex items-center gap-2 cursor-pointer"
                     onClick={() => setIsExistingToken(!isExistingToken)}
                   >
                     <div
-                      className={`w-[19px] h-[19px] border border-[rgba(255,255,255,0.2)] flex items-center justify-center transition-colors ${isExistingToken ? 'bg-[#d08700] border-[#d08700]' : 'bg-transparent'}`}
+                      className={`w-[19px] h-[19px] border-2 flex items-center justify-center transition-all rounded ${
+                        isExistingToken
+                          ? 'bg-[#d08700] border-[#d08700]'
+                          : 'bg-transparent border-[rgba(255,255,255,0.2)]'
+                      }`}
                     >
-                      {isExistingToken && <div className="w-2.5 h-2.5 bg-black" />}
+                      {isExistingToken && (
+                        <svg
+                          className="w-3 h-3 text-black"
+                          fill="none"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="3"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
                     </div>
                     <span className="text-[18px] font-semibold text-[#79767d] font-rajdhani">
                       I have an existing Token
@@ -725,13 +1035,12 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                     privately. If unchecked, we will mint a new token for you.
                   </p>
 
-                  {/* Conditional Fields for Existing Token */}
                   {isExistingToken && (
                     <div className="mt-6 flex flex-col gap-6 animate-in fade-in slide-in-from-top-2">
                       <div className="flex gap-8 w-full">
                         <div className="flex-1 flex flex-col gap-2">
                           <label className="text-[14px] font-rajdhani font-bold text-[#79767d]">
-                            Token Mint Address (SPL)
+                            Token Mint Address (SPL) <span className="text-[#dd3345]">*</span>
                           </label>
                           <input
                             type="text"
@@ -740,8 +1049,17 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                             onChange={(e) =>
                               handleInputChange('existingMintAddress', e.target.value)
                             }
-                            className="w-full bg-transparent border border-[rgba(255,255,255,0.1)] px-3 py-2.5 text-[14px] text-white font-rajdhani focus:outline-none focus:border-[#d08700] transition-colors rounded"
+                            className={`w-full bg-transparent border px-3 py-2.5 text-[14px] text-white font-rajdhani focus:outline-none transition-colors rounded ${
+                              formData.existingMintAddress && !isMintAddressValid
+                                ? 'border-[#dd3345] focus:border-[#dd3345]'
+                                : 'border-[rgba(255,255,255,0.1)] focus:border-[#d08700]'
+                            }`}
                           />
+                          {mintAddressErrorMessage && (
+                            <p className="text-[12px] text-[#dd3345] font-rajdhani mt-1">
+                              {mintAddressErrorMessage}
+                            </p>
+                          )}
                         </div>
                         <div className="w-[197px] flex flex-col gap-2">
                           <label className="text-[14px] font-rajdhani font-bold text-[#79767d]">
@@ -756,6 +1074,59 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                           />
                         </div>
                       </div>
+
+                      {isLoadingPreview && (
+                        <div className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded p-4 flex items-center justify-center gap-3">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#d08700]"></div>
+                          <p className="text-[14px] text-[#79767d] font-rajdhani">Loading token info...</p>
+                        </div>
+                      )}
+
+                      {!isLoadingPreview && tokenPreview && (
+                        <div className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded p-4 flex flex-col gap-4 animate-in fade-in slide-in-from-top-2">
+                          <div className="flex items-center gap-4">
+                            {tokenPreview.image ? (
+                              <img
+                                src={getIpfsUrl(tokenPreview.image)}
+                                alt={tokenPreview.name}
+                                className="w-16 h-16 rounded-full object-cover border border-[rgba(255,255,255,0.1)]"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-16 h-16 rounded-full bg-[rgba(255,255,255,0.1)] flex items-center justify-center border border-[rgba(255,255,255,0.1)]">
+                                <span className="text-[24px] font-rajdhani font-bold text-[#79767d]">
+                                  {tokenPreview.symbol.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex-1 flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-[16px] font-rajdhani font-bold text-white">
+                                  {tokenPreview.name}
+                                </h4>
+                                <span className="text-[14px] font-rajdhani font-medium text-[#d08700]">
+                                  {tokenPreview.symbol}
+                                </span>
+                              </div>
+                              <p className="text-[12px] font-rajdhani text-[#79767d]">
+                                Decimals: {tokenPreview.decimals}
+                              </p>
+                              <p className="text-[12px] font-rajdhani text-[#79767d] font-mono break-all">
+                                {formData.existingMintAddress}
+                              </p>
+                            </div>
+                          </div>
+                          {tokenPreview.description && (
+                            <div className="pt-2 border-t border-[rgba(255,255,255,0.1)]">
+                              <p className="text-[13px] font-rajdhani text-[#79767d] leading-relaxed">
+                                {tokenPreview.description}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <div className="bg-[rgba(208,135,0,0.05)] border border-[#d08700] p-4 flex gap-3 rounded">
                         <div className="shrink-0 text-[#d08700]">
@@ -782,7 +1153,6 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                   )}
                 </div>
 
-                {/* Row 2: Supply & Decimals (Only if not existing token) */}
                 {!isExistingToken && (
                   <div className="flex gap-8 w-full">
                     <div className="flex-1 flex flex-col gap-2">
@@ -833,7 +1203,7 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                 {/* Token Branding - Logo */}
                 <div className="w-full flex flex-col gap-2">
                   <label className="text-[14px] font-rajdhani font-bold text-[#79767d]">
-                    Token Icon
+                    Token Icon <span className="text-[#dd3345]">*</span>
                   </label>
                   <div
                     className="w-full h-[163px] border border-dashed border-[rgba(255,255,255,0.1)] rounded flex flex-col items-center justify-center cursor-pointer hover:border-[rgba(255,255,255,0.2)] transition-colors"
@@ -875,8 +1245,8 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                     Socials
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[14px] font-rajdhani font-bold text-[#79767d] mb-2">
+                    <div className="flex flex-col gap-2">
+                      <label className="block text-[14px] font-rajdhani font-bold text-[#79767d]">
                         X/Twitter
                       </label>
                       <URLInput
@@ -884,12 +1254,17 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                         value={formData.twitterUrl}
                         onChange={(value) => handleInputChange('twitterUrl', value)}
                         placeholder="username"
-                        className="w-full bg-transparent text-white font-rajdhani"
+                        className="w-full bg-transparent text-white font-rajdhani rounded"
                         isInvalid={!isTwitterValid}
                       />
+                      {twitterErrorMessage && (
+                        <p className="text-[12px] text-[#dd3345] font-rajdhani">
+                          {twitterErrorMessage}
+                        </p>
+                      )}
                     </div>
-                    <div>
-                      <label className="block text-[14px] font-rajdhani font-bold text-[#79767d] mb-2">
+                    <div className="flex flex-col gap-2">
+                      <label className="block text-[14px] font-rajdhani font-bold text-[#79767d]">
                         Telegram
                       </label>
                       <URLInput
@@ -897,12 +1272,17 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                         value={formData.telegramUrl}
                         onChange={(value) => handleInputChange('telegramUrl', value)}
                         placeholder="channel"
-                        className="w-full bg-transparent text-white font-rajdhani"
+                        className="w-full bg-transparent text-white font-rajdhani rounded"
                         isInvalid={!isTelegramValid}
                       />
+                      {telegramErrorMessage && (
+                        <p className="text-[12px] text-[#dd3345] font-rajdhani">
+                          {telegramErrorMessage}
+                        </p>
+                      )}
                     </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-[14px] font-rajdhani font-bold text-[#79767d] mb-2">
+                    <div className="sm:col-span-2 flex flex-col gap-2">
+                      <label className="block text-[14px] font-rajdhani font-bold text-[#79767d]">
                         Website
                       </label>
                       <URLInput
@@ -910,9 +1290,14 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                         value={formData.websiteUrl}
                         onChange={(value) => handleInputChange('websiteUrl', value)}
                         placeholder="website.com"
-                        className="w-full bg-transparent text-white font-rajdhani"
+                        className="w-full bg-transparent text-white font-rajdhani rounded"
                         isInvalid={!isWebsiteValid}
                       />
+                      {websiteErrorMessage && (
+                        <p className="text-[12px] text-[#dd3345] font-rajdhani">
+                          {websiteErrorMessage}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -930,7 +1315,7 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                 <div className="flex gap-8 w-full">
                   <div className="flex-1 flex flex-col gap-2">
                     <label className="text-[14px] font-rajdhani font-bold text-[#79767d]">
-                      Price per Token (ZEC) <span className="text-[#dd3345]">*</span>
+                      Price per Token (SOL) <span className="text-[#dd3345]">*</span>
                     </label>
                     <div className="relative w-full">
                       <input
@@ -940,9 +1325,16 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                         onChange={(e) => handleInputChange('pricePerToken', e.target.value)}
                         className="w-full bg-transparent border border-[rgba(255,255,255,0.1)] px-3 py-2.5 text-[14px] text-white font-rajdhani font-bold focus:outline-none focus:border-[#d08700] transition-colors rounded"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#d08700] text-[14px] font-rajdhani font-bold">
-                        SOL / Token
-                      </span>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col items-end gap-0.5">
+                        <span className="text-[#d08700] text-[14px] font-rajdhani font-bold">
+                          SOL / Token
+                        </span>
+                        {pricePerTokenUSD !== null && (
+                          <span className="text-[#79767d] text-[11px] font-rajdhani">
+                            ≈ ${pricePerTokenUSD.toFixed(6)} USD
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -987,11 +1379,11 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                     <div className="relative w-full">
                       <input
                         type="datetime-local"
+                        min={getMinDateTime()}
                         value={formData.saleStartTime}
                         onChange={(e) => handleInputChange('saleStartTime', e.target.value)}
                         className="w-full bg-transparent border border-[rgba(255,255,255,0.1)] px-3 py-2.5 text-[14px] text-white font-rajdhani focus:outline-none focus:border-[#d08700] transition-colors rounded [&::-webkit-calendar-picker-indicator]:invert"
                       />
-                      {/* <CalendarClock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#79767d] pointer-events-none" /> */}
                     </div>
                   </div>
                   <div className="flex-1 flex flex-col gap-2">
@@ -1001,12 +1393,21 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                     <div className="relative w-full">
                       <input
                         type="datetime-local"
+                        min={getMinEndDateTime()}
                         value={formData.saleEndTime}
                         onChange={(e) => handleInputChange('saleEndTime', e.target.value)}
-                        className="w-full bg-transparent border border-[rgba(255,255,255,0.1)] px-3 py-2.5 text-[14px] text-white font-rajdhani focus:outline-none focus:border-[#d08700] transition-colors rounded [&::-webkit-calendar-picker-indicator]:invert"
+                        className={`w-full bg-transparent border px-3 py-2.5 text-[14px] text-white font-rajdhani focus:outline-none transition-colors rounded [&::-webkit-calendar-picker-indicator]:invert ${
+                          dateValidationErrors.saleEndTime
+                            ? 'border-[#dd3345] focus:border-[#dd3345]'
+                            : 'border-[rgba(255,255,255,0.1)] focus:border-[#d08700]'
+                        }`}
                       />
-                      {/* <CalendarClock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#79767d] pointer-events-none" /> */}
                     </div>
+                    {dateValidationErrors.saleEndTime && (
+                      <p className="text-[12px] text-[#dd3345] font-rajdhani">
+                        {dateValidationErrors.saleEndTime}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1049,11 +1450,21 @@ export default function QuickLaunch({ onCancel }: QuickLaunchProps) {
                       <div className="relative w-full">
                         <input
                           type="datetime-local"
+                          min={getMinClaimDateTime()}
                           value={formData.claimOpeningTime}
                           onChange={(e) => handleInputChange('claimOpeningTime', e.target.value)}
-                          className="w-full bg-transparent border border-[rgba(255,255,255,0.1)] px-3 py-2.5 text-[14px] text-white font-rajdhani focus:outline-none focus:border-[#d08700] transition-colors rounded [&::-webkit-calendar-picker-indicator]:invert"
+                          className={`w-full bg-transparent border px-3 py-2.5 text-[14px] text-white font-rajdhani focus:outline-none transition-colors rounded [&::-webkit-calendar-picker-indicator]:invert ${
+                            dateValidationErrors.claimOpeningTime
+                              ? 'border-[#dd3345] focus:border-[#dd3345]'
+                              : 'border-[rgba(255,255,255,0.1)] focus:border-[#d08700]'
+                          }`}
                         />
                       </div>
+                      {dateValidationErrors.claimOpeningTime && (
+                        <p className="text-[12px] text-[#dd3345] font-rajdhani">
+                          {dateValidationErrors.claimOpeningTime}
+                        </p>
+                      )}
                     </div>
                     <div className="flex-1" />
                   </div>

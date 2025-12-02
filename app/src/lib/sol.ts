@@ -1,5 +1,5 @@
 import { deserializeMetadata } from '@metaplex-foundation/mpl-token-metadata';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, getMint } from '@solana/spl-token';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { HELIUS_API_KEY, SOL_NETWORK } from '../configs/env.config';
 import { getIpfsUrl } from './utils';
@@ -219,6 +219,10 @@ export interface TokenMetadata {
   name: string;
   symbol: string;
   image?: string;
+  description?: string;
+  website?: string;
+  twitter?: string;
+  telegram?: string;
   decimals: number;
 }
 
@@ -245,11 +249,20 @@ async function getTokenMetadata(mint: string): Promise<TokenMetadata | null> {
     //@ts-expect-error
     const metadata = deserializeMetadata(accountInfo);
     let imageUrl: string | undefined;
+    let description: string | undefined;
+    let website: string | undefined;
+    let twitter: string | undefined;
+    let telegram: string | undefined;
+
     try {
       const imageResponse = await fetch(getIpfsUrl(metadata.uri));
       if (imageResponse.ok) {
         const imageData = await imageResponse.json();
         imageUrl = imageData?.image;
+        description = imageData?.description;
+        website = imageData?.website;
+        twitter = imageData?.twitter;
+        telegram = imageData?.telegram;
       }
     } catch (fetchError) {
       console.warn(`Unable to fetch metadata JSON for mint ${mint}`, fetchError);
@@ -259,10 +272,62 @@ async function getTokenMetadata(mint: string): Promise<TokenMetadata | null> {
       name: metadata.name.replace(/\0/g, ''),
       symbol: metadata.symbol.replace(/\0/g, ''),
       image: imageUrl,
+      description,
+      website,
+      twitter,
+      telegram,
       decimals: 0,
     };
   } catch (error) {
     console.error('Error fetching token metadata:', error);
+    return null;
+  }
+}
+
+/**
+ * Get complete token information including metadata and decimals
+ */
+export async function getTokenInfo(mint: string): Promise<{
+  name: string;
+  symbol: string;
+  image?: string;
+  description?: string;
+  website?: string;
+  twitter?: string;
+  telegram?: string;
+  decimals: number;
+} | null> {
+  try {
+    const connection = new Connection(getRpcSOLEndpoint());
+    const mintPublicKey = new PublicKey(mint);
+
+    // Get decimals from mint account
+    let decimals = 9; // Default to 9 if we can't fetch
+    try {
+      const mintInfo = await getMint(connection, mintPublicKey);
+      decimals = mintInfo.decimals;
+    } catch (error) {
+      console.warn(`Could not fetch mint info for ${mint}:`, error);
+    }
+
+    // Get metadata
+    const metadata = await getTokenMetadata(mint);
+
+    if (!metadata) {
+      // Return basic info with decimals even if metadata is not found
+      return {
+        name: 'Unknown Token',
+        symbol: 'UNKNOWN',
+        decimals,
+      };
+    }
+
+    return {
+      ...metadata,
+      decimals,
+    };
+  } catch (error) {
+    console.error('Error fetching token info:', error);
     return null;
   }
 }
