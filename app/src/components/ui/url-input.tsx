@@ -94,9 +94,13 @@ export default function URLInput({
 
   return (
     <div
-      className={`relative flex items-center border ${
-        isInvalid && value ? 'border-[#d08700]' : 'border-[rgba(255,255,255,0.1)]'
-      } ${isFocused ? 'border-[#d08700]' : ''} ${className}`}
+      className={`relative flex items-center border rounded ${
+        isInvalid && value
+          ? 'border-[#dd3345] focus-within:border-[#dd3345]'
+          : isFocused
+            ? 'border-[#d08700]'
+            : 'border-[rgba(255,255,255,0.1)]'
+      } ${className}`}
     >
       {/* Prefix display */}
       <span className="pl-3 py-2 text-gray-500 select-none border-r border-[rgba(255,255,255,0.1)] px-1 bg-[rgba(255,255,255,0.05)] font-share-tech-mono">

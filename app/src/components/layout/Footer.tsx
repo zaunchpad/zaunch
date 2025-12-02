@@ -51,7 +51,8 @@ export function Footer() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-6">
+            {/* TODO: Hide resources */}
+            {/* <div className="flex flex-col gap-6">
               <h4 className="font-consolas font-bold text-base text-gray-300">RESOURCES</h4>
               <div className="flex flex-col gap-3">
                 <a
@@ -77,16 +78,18 @@ export function Footer() {
                   Github
                 </a>
               </div>
-            </div>
+            </div> */}
           </div>
         </div>
 
         {/* Bottom Bar */}
         <div className="border-t-[0.667px] border-gray-900 pt-10 flex items-center justify-center">
           <div className="flex items-center gap-2 text-lg text-[#999999] font-rajdhani">
-            <span>Built with love by 🍗</span>
-            <span className="font-semibold text-[#ffc929]">cooked</span>
+            <span>Built with ❤️ by</span>
             <span>cypherpunks</span>
+            <Link href={'https://github.com/zaunchpad'} target="_blank" rel="noreferrer">
+              <img src="/assets/github.svg" alt="Github" />
+            </Link>
           </div>
         </div>
       </div>
