@@ -3,7 +3,7 @@
 /* TEAM */
 Developer: Zaunchpad
 Contact: support@zaunchpad.com
-Website: https://www.zaunchpad.com
+Website: https://app.zaunchpad.com
 Location: Global
 
 /* THANKS */

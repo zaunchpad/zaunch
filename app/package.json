@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Privacy-first cross-chain token launchpad enabling anonymous participation in crypto token launches using Zcash shielded pools",
   "private": true,
-  "homepage": "https://www.zaunchpad.com",
+  "homepage": "https://app.zaunchpad.com",
   "repository": {
     "type": "git",
     "url": "https://github.com/zaunchpad/zaunchpad.git"
@@ -30,7 +30,7 @@
   ],
   "author": {
     "name": "Zaunchpad",
-    "url": "https://www.zaunchpad.com"
+    "url": "https://app.zaunchpad.com"
   },
   "license": "MIT",
   "engines": {

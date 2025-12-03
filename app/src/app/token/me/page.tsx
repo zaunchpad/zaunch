@@ -16,16 +16,16 @@ export async function generateMetadata(): Promise<Metadata> {
     '@type': 'WebPage',
     name: 'My Portfolio - ZAUNCHPAD',
     description: description,
-    url: 'https://www.zaunchpad.com/me',
+    url: 'https://app.zaunchpad.com/token/me',
     isPartOf: {
       '@type': 'WebSite',
       name: 'ZAUNCHPAD',
-      url: 'https://www.zaunchpad.com',
+      url: 'https://app.zaunchpad.com',
     },
     provider: {
       '@type': 'Organization',
       name: 'ZAUNCHPAD',
-      url: 'https://www.zaunchpad.com',
+      url: 'https://app.zaunchpad.com',
     },
   };
 
@@ -53,7 +53,7 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       type: 'website',
       locale: 'en_US',
-      url: 'https://www.zaunchpad.com/me',
+      url: 'https://app.zaunchpad.com/token/me',
       title,
       description,
       siteName: 'ZAUNCHPAD',
@@ -75,7 +75,7 @@ export async function generateMetadata(): Promise<Metadata> {
       images: ['/og-image.png'],
     },
     alternates: {
-      canonical: 'https://www.zaunchpad.com/me',
+      canonical: 'https://app.zaunchpad.com/token/me',
     },
     other: {
       'application/ld+json': JSON.stringify(structuredData),

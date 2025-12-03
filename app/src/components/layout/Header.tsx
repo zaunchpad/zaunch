@@ -232,15 +232,6 @@ export default function Header() {
               >
                 MY TICKETS
               </Link>
-              <a
-                href="https://www.zaunchpad.com/docs"
-                target="_blank"
-                className="font-rajdhani font-medium text-lg text-gray-400 hover:text-white transition-colors uppercase"
-                onClick={() => setSidebarOpen(false)}
-                rel="noopener noreferrer"
-              >
-                DOCS
-              </a>
             </nav>
             <div className="mt-auto flex flex-col gap-4">
               <div className="flex items-center justify-between border-b border-[rgba(208,135,0,0.15)] pb-4">

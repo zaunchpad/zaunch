@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     description:
       'Create and launch your token across multiple blockchains with ZAUNCHPAD. Deploy tokens on Solana, NEAR Protocol, and other supported chains.',
     type: 'website',
-    url: 'https://www.zaunchpad.com/create',
+    url: 'https://app.zaunchpad.com/create',
     images: [
       {
         url: '/og-image.png',
