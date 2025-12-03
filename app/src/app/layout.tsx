@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     'web3',
     'decentralized',
   ],
-  authors: [{ name: 'Zaunchpad', url: 'https://www.zaunchpad.com' }],
+  authors: [{ name: 'Zaunchpad', url: 'https://app.zaunchpad.com' }],
   creator: 'Zaunchpad',
   publisher: 'Zaunchpad',
   formatDetection: {
@@ -48,14 +48,14 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL('https://www.zaunchpad.com'),
+  metadataBase: new URL('https://app.zaunchpad.com'),
   alternates: {
     canonical: '/',
   },
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://www.zaunchpad.com',
+    url: 'https://app.zaunchpad.com',
     siteName: 'ZAUNCHPAD',
     title: 'ZAUNCHPAD - Privacy-First Token Launchpad',
     description:

@@ -2,7 +2,7 @@ User-agent: *
 Allow: /
 
 # Sitemap
-Sitemap: https://www.zaunchpad.com/sitemap.xml
+Sitemap: https://app.zaunchpad.com/sitemap.xml
 
 # Crawl-delay
 Crawl-delay: 1
