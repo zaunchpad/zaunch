@@ -89,19 +89,27 @@ export default function Header() {
           <nav className="hidden md:flex items-center gap-8">
             <Link
               href="/token"
-              className="font-rajdhani font-medium text-sm text-gray-400 hover:text-white transition-colors leading-[20px] uppercase"
+              className={`font-rajdhani font-medium text-sm text-gray-400 hover:text-white transition-colors leading-[20px] uppercase pb-0.5 ${
+                pathname === '/token' || (pathname.startsWith('/token/') && pathname !== '/token/me')
+                  ? 'border-b border-[#d08700] text-white'
+                  : ''
+              }`}
             >
               EXPLORE LAUNCHES
             </Link>
             <Link
               href="/create"
-              className="font-rajdhani font-medium text-sm text-gray-400 hover:text-white transition-colors leading-[20px] uppercase"
+              className={`font-rajdhani font-medium text-sm text-gray-400 hover:text-white transition-colors leading-[20px] uppercase pb-0.5 ${
+                pathname === '/create' ? 'border-b border-[#d08700] text-white' : ''
+              }`}
             >
               CREATE
             </Link>
             <Link
               href="/token/me"
-              className="font-rajdhani font-medium text-sm text-gray-400 hover:text-white transition-colors leading-[20px] uppercase"
+              className={`font-rajdhani font-medium text-sm text-gray-400 hover:text-white transition-colors leading-[20px] uppercase pb-0.5 ${
+                pathname === '/token/me' ? 'border-b border-[#d08700] text-white' : ''
+              }`}
             >
               MY TICKETS
             </Link>
@@ -197,21 +205,29 @@ export default function Header() {
             <nav className="flex flex-col space-y-6 mb-8">
               <Link
                 href="/token"
-                className="font-rajdhani font-medium text-lg text-gray-400 hover:text-white transition-colors uppercase"
+                className={`font-rajdhani font-medium text-lg text-gray-400 hover:text-white transition-colors uppercase pb-1 ${
+                  pathname === '/token' || (pathname.startsWith('/token/') && pathname !== '/token/me')
+                    ? 'border-b-2 border-[#d08700] text-white'
+                    : ''
+                }`}
                 onClick={() => setSidebarOpen(false)}
               >
                 EXPLORE LAUNCHES
               </Link>
               <Link
                 href="/create"
-                className="font-rajdhani font-medium text-lg text-gray-400 hover:text-white transition-colors uppercase"
+                className={`font-rajdhani font-medium text-lg text-gray-400 hover:text-white transition-colors uppercase pb-1 ${
+                  pathname === '/create' ? 'border-b-2 border-[#d08700] text-white' : ''
+                }`}
                 onClick={() => setSidebarOpen(false)}
               >
                 CREATE
               </Link>
               <Link
                 href="/token/me"
-                className="font-rajdhani font-medium text-lg text-gray-400 hover:text-white transition-colors uppercase"
+                className={`font-rajdhani font-medium text-lg text-gray-400 hover:text-white transition-colors uppercase pb-1 ${
+                  pathname === '/token/me' ? 'border-b-2 border-[#d08700] text-white' : ''
+                }`}
                 onClick={() => setSidebarOpen(false)}
               >
                 MY TICKETS
