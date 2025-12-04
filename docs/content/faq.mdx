@@ -1,0 +1,303 @@
+# FAQ
+
+Frequently asked questions about Zaunchpad, token launches, privacy features, and cross-chain operations.
+
+## General Questions
+
+### What is Zaunchpad?
+
+Zaunchpad is a next-generation decentralized launchpad that bridges the gap between privacy and transparency. It allows users to launch and participate in token sales across multiple chains (Solana, NEAR) while leveraging privacy features and advanced bonding curve mechanisms via Meteora.
+
+### How do I get started?
+
+1. Visit [app.zaunchpad.com](https://app.zaunchpad.com)
+2. Connect your wallet (Solana or NEAR)
+3. Browse available token launches or create your own
+4. Follow our [User Steps guide](/docs/user-steps) for detailed instructions
+
+### Which blockchains are supported?
+
+Currently supported:
+- **Solana**: Full support for token creation and launches
+- **NEAR**: Full support with NEAR Intents integration
+
+More chains coming soon!
+
+## Privacy and Zcash Pools
+
+### How do we know Zcash pools are shielded?
+
+Zcash pools are **supported by NEAR Intents** and settled in **Phala Trusted Execution Environment (TEE)**. This provides cryptographic guarantees that:
+
+- Transactions are executed in a secure, private environment
+- Privacy mechanisms are cryptographically verified
+- Execution cannot be tampered with
+- All operations are attested and verified
+
+You can verify this by:
+- Checking the token page for "Privacy Enabled" badge
+- Reviewing the smart contract code
+- Verifying the anonymity set size
+- Checking that transactions appear as shielded on blockchain explorers
+
+### How do we know it can't be gamed?
+
+Zaunchpad's privacy mechanisms are **settled in Phala Trusted Execution Environment**, which provides:
+
+- **Confidentiality**: Code execution remains private
+- **Integrity**: Execution cannot be tampered with
+- **Attestation**: Cryptographic proof of correct execution
+- **Verification**: Anyone can verify the execution was correct
+
+The TEE ensures that even validators cannot see or modify the execution, making it extremely difficult to game the system.
+
+### What is an anonymity set?
+
+The anonymity set is the group of all possible participants in a transaction. The larger the anonymity set, the greater your privacy. See our [Understanding Anonymity Set](/docs/anonymity-set) guide for more details.
+
+### How private are my transactions?
+
+Privacy depends on the anonymity set size:
+- **Large set (100+)**: Very high privacy, very difficult to identify you
+- **Medium set (20-100)**: Moderate privacy, reasonable protection
+- **Small set (< 20)**: Lower privacy, easier to identify participants
+
+We recommend participating when the anonymity set is at least 50 for reasonable privacy.
+
+## Fees and Economics
+
+### Where do fees go from swaps?
+
+Fees from swaps are distributed as follows:
+
+- **NEAR Intents**: Fees go to the NEAR Intents protocol for maintaining the intent system
+- **Frontend/Platform**: Zaunchpad takes a small fee for platform maintenance and development
+- **Gas Fees**: Paid to validators on respective blockchains
+
+### What are the fees for launching a token?
+
+Token launch fees vary based on:
+- Blockchain network (Solana vs NEAR have different gas costs)
+- Token complexity (cross-chain support, privacy features)
+- Current network conditions
+
+Fees are displayed before you confirm the launch transaction.
+
+### What are the fees for participating?
+
+Participation fees include:
+- **Gas Fees**: Network transaction costs
+- **Platform Fee**: Small Zaunchpad service fee (if applicable)
+- **Bridge Fees**: For cross-chain claims (if applicable)
+
+All fees are displayed before you confirm any transaction.
+
+## Cross-Chain and OFT
+
+### If I launch a token, how do I convert my Zcash liquidity into Solana?
+
+Currently, you need to manually convert Zcash liquidity to Solana:
+
+1. Withdraw liquidity from Zcash pool
+2. Convert Zcash to Solana-compatible asset
+3. Deposit into Solana liquidity pool
+
+**Future**: We're working on automated liquidity conversion. This will allow automatic conversion of Zcash liquidity to Solana (and other chains) without manual steps.
+
+### How does cross-chain claiming work?
+
+Cross-chain claiming uses **LayerZero's OFT (Omnichain Fungible Token)** standard:
+
+1. Tokens are created on source chain
+2. OFT bridge is configured automatically
+3. Users can claim tokens on target chains
+4. LayerZero validators process the cross-chain transfer
+5. Tokens are minted on target chain
+
+See our [Claiming with OFT](/docs/oft-claiming) guide for detailed instructions.
+
+### Which chains support cross-chain claims?
+
+Currently supported:
+- Solana ↔ NEAR
+- Solana ↔ Base
+- Solana ↔ Arbitrum
+- NEAR ↔ Base
+- NEAR ↔ Arbitrum
+
+More chains coming soon!
+
+## Refunds
+
+### How do I provide refunds for people?
+
+**Current Status**: Refunds are not yet automated. To provide refunds:
+
+1. Manually process refund requests
+2. Convert Zcash to Solana (or target chain)
+3. Send refunds to users' wallets
+
+**Future**: We need to automate Zcash to Solana liquidity conversion to facilitate automated refunds. This would require:
+- Automation like **TukTuk by Helium** to take Zcash and convert it to Solana
+- Deposit into escrow contract
+- Automated refund processing
+
+We're working on this feature and will update when available.
+
+## Security and Audits
+
+### Are your contracts audited?
+
+**Not yet**. Our contracts are open source and available for review:
+
+- [GitHub Repository](https://github.com/zaunchpad/zaunchpad)
+- All smart contract code is publicly available
+- We welcome security reviews and contributions
+
+We plan to conduct formal audits before mainnet launch. In the meantime, we recommend:
+- Reviewing the code yourself
+- Testing on testnet first
+- Starting with small amounts
+- Reporting any issues you find
+
+### How secure is Zaunchpad?
+
+Zaunchpad uses multiple security measures:
+
+- **Smart Contracts**: Open source, reviewable code
+- **TEE Execution**: Phala TEE for privacy operations
+- **NEAR Intents**: Verified intent execution
+- **LayerZero**: Battle-tested cross-chain protocol
+- **IPFS Storage**: Decentralized, immutable storage
+
+However, as with any DeFi protocol:
+- Always do your own research
+- Start with small amounts
+- Understand the risks
+- Never invest more than you can afford to lose
+
+## Token Launching
+
+### How do I launch on Zaunchpad?
+
+**Anyone can launch a token**. The process is simple:
+
+1. Connect your wallet
+2. Navigate to "Create Token"
+3. Fill in token details
+4. Configure launch parameters
+5. Deploy your token
+
+See our [User Steps guide](/docs/user-steps) for detailed instructions.
+
+Alternatively, you can **coordinate with our anonymous support** for assistance with:
+- Token design and parameters
+- Launch strategy
+- Marketing and promotion
+- Technical support
+
+### What are the requirements to launch a token?
+
+Basic requirements:
+- Connected wallet with sufficient funds for gas
+- Token name and symbol
+- Initial supply and pricing parameters
+- (Optional) Token logo and description
+
+No KYC or approval process required!
+
+### Can I customize my token launch?
+
+Yes! You can customize:
+- Token name, symbol, and description
+- Initial supply and pricing
+- Bonding curve parameters
+- Launch date and duration
+- Privacy features (shielded pools)
+- Cross-chain distribution
+- Logo and branding
+
+## Integration and Infrastructure
+
+### Can I use Zaunchpad in my infrastructure?
+
+Yes! Zaunchpad can be integrated into your infrastructure. Here's the fee breakdown:
+
+**Fee Structure:**
+- **Platform Fee**: Small percentage of transactions (varies by integration)
+- **Gas Fees**: Standard blockchain gas fees
+- **Bridge Fees**: LayerZero protocol fees for cross-chain (if applicable)
+- **Custom Integration**: Contact us for enterprise pricing
+
+**Integration Options:**
+- **API Access**: Use our backend API for token operations
+- **Smart Contracts**: Interact directly with deployed contracts
+- **Frontend Integration**: Embed Zaunchpad UI components
+- **White Label**: Custom branding and deployment
+
+Contact us for integration details and pricing.
+
+### What APIs are available?
+
+Zaunchpad provides:
+- **REST API**: Backend API for token operations
+- **Smart Contract ABIs**: Direct contract interaction
+- **WebSocket**: Real-time updates (coming soon)
+
+See our [GitHub](https://github.com/zaunchpad/zaunchpad) for API documentation and examples.
+
+## Technical Questions
+
+### What is NEAR Intents?
+
+NEAR Intents are declarative statements that describe desired outcomes for cross-chain operations. See our [Working with NEAR Intents](/docs/near-intents) guide for details.
+
+### What is Phala TEE?
+
+Phala Trusted Execution Environment provides secure, private execution of code. It ensures:
+- Confidentiality (code execution is private)
+- Integrity (execution cannot be tampered with)
+- Attestation (cryptographic proof of correct execution)
+
+### How does the bonding curve work?
+
+Zaunchpad uses **Meteora's Dynamic Liquidity Market Maker (DLMM)** for bonding curves:
+
+- Price adjusts based on supply and demand
+- Liquidity is provided automatically
+- Efficient price discovery
+- Lower slippage than traditional AMMs
+
+## Support
+
+### Where can I get help?
+
+- **Documentation**: Check our docs (you're here!)
+- **GitHub Issues**: [github.com/zaunchpad/zaunchpad/issues](https://github.com/zaunchpad/zaunchpad/issues)
+- **Application Support**: Use in-app support if available
+- **Community**: Join our community channels (coming soon)
+
+### How do I report a bug?
+
+1. Check if it's already reported on GitHub
+2. Create a new issue with:
+   - Description of the bug
+   - Steps to reproduce
+   - Expected vs actual behavior
+   - Screenshots (if applicable)
+   - Transaction hashes (if applicable)
+
+### How do I request a feature?
+
+1. Check existing feature requests on GitHub
+2. Create a new issue with:
+   - Feature description
+   - Use case and benefits
+   - Implementation suggestions (if any)
+
+## Resources
+
+- [GitHub Repository](https://github.com/zaunchpad/zaunchpad)
+- [Main Application](https://app.zaunchpad.com)
+- [Documentation Home](/docs)
+- [Architecture Overview](/docs/architecture)

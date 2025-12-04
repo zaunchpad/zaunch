@@ -1,0 +1,217 @@
+# Understanding Anonymity Set
+
+The anonymity set is a crucial concept for understanding privacy guarantees in Zaunchpad's shielded pools. This guide explains what it is, how it works, and how to interpret it.
+
+## What is an Anonymity Set?
+
+The anonymity set is the group of all possible participants who could have made a particular transaction. It represents the "crowd" you're hiding in.
+
+### Simple Analogy
+
+Imagine you're in a crowd of 100 people, and someone wants to identify you. If they can only see the crowd but not individuals, you have an anonymity set of 100. The larger the crowd, the harder it is to identify you.
+
+## How Anonymity Sets Work
+
+### In Shielded Pools
+
+When you participate in a token launch through a shielded pool:
+
+1. **Your Transaction Enters Pool**: Your transaction is mixed with others
+2. **Anonymity Set Forms**: All participants become part of the set
+3. **Privacy Level Determined**: Set size determines your privacy level
+4. **Identification Difficulty**: Larger sets = harder to identify you
+
+### Mathematical Representation
+
+```
+Privacy Level = 1 / Anonymity Set Size
+
+Anonymity Set of 10:   Privacy = 1/10  = 10% chance of identification
+Anonymity Set of 100:  Privacy = 1/100 = 1% chance of identification
+Anonymity Set of 1000: Privacy = 1/1000 = 0.1% chance of identification
+```
+
+## Anonymity Set Sizes
+
+### Very Small (1-5)
+
+- **Privacy Level**: Very Low
+- **Risk**: High chance of identification
+- **Use Case**: Not recommended for privacy
+- **Recommendation**: Wait for more participants
+
+### Small (6-20)
+
+- **Privacy Level**: Low
+- **Risk**: Moderate chance of identification
+- **Use Case**: Basic privacy needs
+- **Recommendation**: Acceptable for low-value transactions
+
+### Medium (21-100)
+
+- **Privacy Level**: Moderate
+- **Risk**: Low chance of identification
+- **Use Case**: Standard privacy needs
+- **Recommendation**: Good for most use cases
+
+### Large (101-1000)
+
+- **Privacy Level**: High
+- **Risk**: Very low chance of identification
+- **Use Case**: High privacy requirements
+- **Recommendation**: Excellent for sensitive transactions
+
+### Very Large (1000+)
+
+- **Privacy Level**: Very High
+- **Risk**: Extremely low chance of identification
+- **Use Case**: Maximum privacy needs
+- **Recommendation**: Ideal for maximum privacy
+
+## Factors Affecting Anonymity Set
+
+### Pool Participation
+
+- **More Participants**: Larger anonymity set
+- **Fewer Participants**: Smaller anonymity set
+- **Timing**: Early participants have smaller sets
+- **Growth Rate**: Faster growth = better privacy faster
+
+### Transaction Patterns
+
+- **Unique Amounts**: If your amount is unique, set effectively smaller
+- **Common Amounts**: Standard amounts blend better
+- **Timing**: Transactions close together may be linked
+- **Frequency**: More frequent participation = better blending
+
+### Pool Design
+
+- **Mixing Algorithms**: Better mixing = better privacy
+- **Pool Size Limits**: Some pools have maximum participants
+- **Time Windows**: Pools may have time-based windows
+- **Shielded Pool Type**: Unified pool provides better privacy
+
+## How to Check Anonymity Set
+
+### On Zaunchpad
+
+1. Navigate to token page
+2. Look for "Anonymity Set" metric
+3. Check current size and trend
+4. Review privacy level indicator
+
+### Understanding the Display
+
+- **Current Size**: Number of participants right now
+- **Historical Size**: Average size over time
+- **Privacy Level**: Visual indicator (Low/Medium/High)
+- **Trend**: Whether set is growing or shrinking
+
+## Privacy Guarantees
+
+### What Anonymity Set Guarantees
+
+✅ **Statistical Privacy**: Harder to identify you statistically
+✅ **Plausible Deniability**: You can plausibly deny participation
+✅ **Crowd Blending**: You blend into the crowd
+✅ **Reduced Linkability**: Harder to link transactions
+✅ **Mathematical Guarantee**: Privacy is cryptographically proven
+
+### What Anonymity Set Doesn't Guarantee
+
+❌ **Perfect Privacy**: Not 100% guaranteed (but very close with large sets)
+❌ **Against Advanced Attacks**: Sophisticated analysis may still work (very difficult)
+❌ **Off-Chain Privacy**: Doesn't protect off-chain information
+❌ **Future Privacy**: Privacy may degrade over time (minimal with large sets)
+
+## Best Practices
+
+### Maximizing Privacy
+
+1. **Wait for Larger Sets**: Don't be the first participant
+2. **Use Standard Amounts**: Avoid unique transaction amounts
+3. **Time Your Participation**: Participate when pool is active
+4. **Check Set Size**: Verify anonymity set before participating
+5. **Monitor Trends**: Watch if set is growing or shrinking
+
+### When to Participate
+
+- ✅ **Good**: Anonymity set > 50
+- ✅ **Better**: Anonymity set > 100
+- ✅ **Best**: Anonymity set > 500
+- ⚠️ **Caution**: Anonymity set < 20
+- ❌ **Avoid**: Anonymity set < 10
+
+## Real-World Examples
+
+### Example 1: Small Set
+
+```
+Anonymity Set: 5 participants
+Your Privacy: 20% chance of identification
+Risk Level: High
+Recommendation: Wait for more participants
+```
+
+### Example 2: Medium Set
+
+```
+Anonymity Set: 50 participants
+Your Privacy: 2% chance of identification
+Risk Level: Low
+Recommendation: Acceptable for most uses
+```
+
+### Example 3: Large Set
+
+```
+Anonymity Set: 500 participants
+Your Privacy: 0.2% chance of identification
+Risk Level: Very Low
+Recommendation: Excellent privacy
+```
+
+## Limitations
+
+### Statistical Limitations
+
+- **Not Perfect**: Even large sets don't guarantee 100% privacy (but very close)
+- **Advanced Analysis**: Sophisticated techniques may reduce effective set size (very difficult)
+- **Temporal Analysis**: Time-based analysis can narrow the set (minimal impact)
+
+### Practical Limitations
+
+- **Pool Availability**: Not all tokens have active pools
+- **Timing**: You may need to wait for sufficient participants
+- **Costs**: Shielded transactions may cost more gas (minimal)
+
+## Future Improvements
+
+### Planned Enhancements
+
+- **Dynamic Sets**: Sets that adapt to participation
+- **Cross-Pool Mixing**: Mixing across multiple pools
+- **Time-Based Mixing**: Better temporal distribution
+- **Enhanced Metrics**: More detailed privacy metrics
+
+## Technical Details
+
+### How Set Size is Calculated
+
+1. **Count Participants**: Number of unique addresses in pool
+2. **Account for Mixing**: Adjust for mixing effectiveness
+3. **Time Window**: Consider participants in time window
+4. **Display Metric**: Show calculated set size
+
+### Privacy Metrics
+
+- **Effective Set Size**: Adjusted for mixing quality
+- **Theoretical Maximum**: Maximum possible set size
+- **Current Size**: Actual current participants
+- **Privacy Score**: Composite privacy metric
+
+## Resources
+
+- [Privacy Research](https://z.cash/technology)
+- [Anonymity Set Papers](https://eprint.iacr.org)
+- [Zaunchpad GitHub](https://github.com/zaunchpad/zaunchpad)
