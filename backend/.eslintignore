@@ -1,7 +1,0 @@
-node_modules
-dist
-build
-db
-*.config.js
-*.config.ts
-bun.lock
