@@ -43,7 +43,7 @@ export function Footer() {
                   Create
                 </Link>
                 <Link
-                  href="/token/me"
+                  href="/token"
                   className="font-rajdhani font-medium text-base text-gray-600 hover:text-gray-300 transition-colors"
                 >
                   Dashboard

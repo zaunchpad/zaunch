@@ -211,7 +211,7 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
                 Manage assets, claims, and deployments.
               </p>
             </div>
-            <Tabs defaultValue="tokens" className="w-full">
+            {/* <Tabs defaultValue="tokens" className="w-full">
               <TabsList className="border border-[rgba(255,255,255,0.1)] h-[45px] bg-transparent p-[4px] w-[414px]">
                 <TabsTrigger
                   value="tokens"
@@ -227,7 +227,7 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
                   MY TICKET VAULT
                 </TabsTrigger>
               </TabsList>
-            </Tabs>
+            </Tabs> */}
           </div>
 
           <div className="flex flex-col gap-2 mb-6 md:mb-8">
@@ -266,7 +266,7 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
                 Manage assets, claims, and deployments.
               </p>
             </div>
-            <Tabs defaultValue="tokens" className="w-full">
+            {/* <Tabs defaultValue="tokens" className="w-full">
               <TabsList className="border border-[rgba(255,255,255,0.1)] h-[45px] bg-transparent p-[4px] w-[414px]">
                 <TabsTrigger
                   value="tokens"
@@ -282,7 +282,7 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
                   MY TICKET VAULT
                 </TabsTrigger>
               </TabsList>
-            </Tabs>
+            </Tabs> */}
           </div>
 
           {searchQuery.trim() && isSearching ? (
@@ -329,7 +329,7 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
             </p>
           </div>
           <Tabs defaultValue="tokens" className="w-full">
-            <TabsList className="border border-[rgba(255,255,255,0.1)] h-10 bg-transparent p-1 w-full md:w-[500px]">
+            {/* <TabsList className="border border-[rgba(255,255,255,0.1)] h-10 bg-transparent p-1 w-full md:w-[500px]">
               <TabsTrigger
                 value="tokens"
                 className="data-[state=active]:bg-[rgba(27,31,38,0.72)] data-[state=active]:text-gray-300 text-gray-400 font-rajdhani font-medium text-xs sm:text-sm px-3 sm:px-4 py-1.5"
@@ -342,7 +342,7 @@ export default function MyTokensClient({ solPrice: initialSolPrice }: MyTokensCl
               >
                 MY TICKET VAULT
               </TabsTrigger>
-            </TabsList>
+            </TabsList> */}
             <TabsContent value="tokens" className="mt-4">
               <div className="flex flex-col gap-2 mb-4">
                 <div className="flex-1">

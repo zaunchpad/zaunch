@@ -1,6 +1,6 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { X, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import ExploreTokenCard from '@/components/ExploreTokenCard';
 import { NoTokensFound } from '@/components/NoTokensFound';
@@ -42,47 +42,41 @@ export default function TokenSearch() {
 
     const now = Date.now();
 
-    // Parse timestamps - they come as BigInt (seconds) or string
     let startTime: number;
     let endTime: number;
 
     if (typeof token.startTime === 'bigint') {
-      startTime = Number(token.startTime) * 1000; // Convert seconds to milliseconds
+      startTime = Number(token.startTime) * 1000; 
     } else if (typeof token.startTime === 'string') {
-      // Check if it's a numeric string or ISO date string
       const parsed = Number(token.startTime);
       if (!isNaN(parsed)) {
-        startTime = parsed * 1000; // Unix timestamp in seconds
+        startTime = parsed * 1000; 
       } else {
-        startTime = new Date(token.startTime).getTime(); // ISO string
+        startTime = new Date(token.startTime).getTime();
       }
     } else {
       startTime = Number(token.startTime) * 1000;
     }
 
     if (typeof token.endTime === 'bigint') {
-      endTime = Number(token.endTime) * 1000; // Convert seconds to milliseconds
+      endTime = Number(token.endTime) * 1000; 
     } else if (typeof token.endTime === 'string') {
-      // Check if it's a numeric string or ISO date string
       const parsed = Number(token.endTime);
       if (!isNaN(parsed)) {
-        endTime = parsed * 1000; // Unix timestamp in seconds
+        endTime = parsed * 1000; 
       } else {
-        endTime = new Date(token.endTime).getTime(); // ISO string
+        endTime = new Date(token.endTime).getTime(); 
       }
     } else {
       endTime = Number(token.endTime) * 1000;
     }
 
-    // If start time hasn't started → UPCOMING
     if (now < startTime) {
       return 'upcoming';
     }
-    // If start time has started and end time hasn't passed → LIVE
     else if (now >= startTime && now <= endTime) {
       return 'live';
     }
-    // If end time has passed → ENDED
     else {
       return 'ended';
     }
@@ -165,24 +159,27 @@ export default function TokenSearch() {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex-1 w-full sm:max-w-[727px]">
             <div className="relative">
+              <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                <Search className="w-5 h-5" />
+              </div>
               <input
                 type="text"
                 placeholder="SEARCH"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-8 pl-3 pr-6 py-[10px] bg-transparent border border-[rgba(255,255,255,0.1)] text-sm font-share-tech-mono text-gray-500 placeholder-gray-500 uppercase tracking-[0.7px] focus:outline-none focus:border-[rgba(255,255,255,0.2)]"
+                className="w-full h-10 pl-11 pr-12 py-3 bg-transparent border border-[rgba(255,255,255,0.1)] text-sm font-share-tech-mono text-gray-500 placeholder-gray-500 tracking-[0.7px] focus:outline-none focus:border-[rgba(255,255,255,0.2)]"
               />
               {searchQuery && (
                 <button
                   onClick={clearSearch}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               )}
               {isLoading && (
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
                 </div>
               )}
             </div>
@@ -277,6 +274,7 @@ export default function TokenSearch() {
               amountToSell={(token as any).amountToSell}
               minAmountToSell={(token as any).minAmountToSell}
               totalClaimed={(token as any).totalClaimed || 0}
+              tokensPerProof={(token as any).tokensPerProof || 0}
               startTime={token.startTime.toString()}
               endTime={token.endTime.toString()}
             />

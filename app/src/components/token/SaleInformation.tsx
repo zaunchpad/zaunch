@@ -3,6 +3,7 @@
 import { Info } from 'lucide-react';
 import { Token } from '@/types/token';
 import { useCryptoPrices } from '@/hooks/useCryptoPrices';
+import { InfoTooltip } from '@/components/ui/info-tooltip';
 
 interface SaleInformationProps {
   token: Token;
@@ -127,7 +128,7 @@ export function SaleInformation({ token }: SaleInformationProps) {
             </div>
           </div>
           {/* Token Info List */}
-          <div className="flex flex-col gap-3 sm:gap-4 md:gap-5 lg:border-l lg:pl-0 lg:ml-6 lg:border-white/10 pt-0 lg:pt-0">
+          <div className="flex flex-col gap-3 sm:gap-4 md:gap-5 md:border-l md:pl-5 lg:ml-6 lg:border-white/10 pt-0 lg:pt-0">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2 border-b border-white/10 pb-2 sm:pb-1.5">
               <span className="font-rajdhani text-xs sm:text-sm text-white shrink-0">Token Name</span>
               <span className="font-rajdhani font-semibold text-xs sm:text-sm text-white sm:text-right break-words">
@@ -155,7 +156,10 @@ export function SaleInformation({ token }: SaleInformationProps) {
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2 border-b border-white/10 pb-2 sm:pb-1.5">
               <div className="flex items-center gap-1 shrink-0">
                 <span className="font-rajdhani text-xs sm:text-sm text-white">Refund Policy</span>
-                <Info className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white shrink-0" />
+                <InfoTooltip
+                  title="Refund Policy"
+                  content="Future feature. On claim, if target is not hit, your ticket is used to get back tokens. Since funding is in Zcash, we need to add in future a way to migrate on Solana or use smart accounts to give back in Shielded zcash."
+                />
               </div>
               <span className="font-rajdhani font-semibold text-xs sm:text-sm text-white sm:text-right">N/A</span>
             </div>
