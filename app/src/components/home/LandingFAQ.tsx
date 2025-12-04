@@ -39,7 +39,7 @@ const faqs: Array<{ question: string; answer: ReactNode }> = [
       <>
         Zaunchpad leverages{' '}
         <a
-          href="https://z.cash"
+          href="https://zechub.wiki/using-zcash/shielded-pools"
           target="_blank"
           rel="noopener noreferrer"
           className="text-[#d08700] hover:text-[#f0a020] underline transition-colors"
