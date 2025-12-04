@@ -1,0 +1,84 @@
+# Claiming with OFT
+
+> **Coming Soon**: Cross-chain claiming via LayerZero OFT is currently under development. This feature will allow you to claim tokens on different chains using the Omnichain Fungible Token standard.
+
+## What is OFT?
+
+OFT (Omnichain Fungible Token) is LayerZero's standard for tokens that exist across multiple blockchains. When available, it will allow a single token to exist on multiple chains while maintaining:
+
+- **Unified Supply**: Total supply tracked across all chains
+- **Cross-Chain Transfers**: Seamless movement between chains
+- **Single Source of Truth**: LayerZero protocol manages state
+
+## Current Status
+
+Cross-chain claiming via OFT is **not yet available**. Currently, you can:
+
+- ✅ **Claim on Solana**: Direct claims to your Solana wallet using ZK proofs
+- ❌ **Cross-Chain Claims**: Coming soon
+
+## Planned Features
+
+When OFT claiming is available, you will be able to:
+
+### Claim on Multiple Chains
+
+- Claim tokens on Solana (currently available)
+- Claim tokens on NEAR (coming soon)
+- Claim tokens on Base (coming soon)
+- Claim tokens on Arbitrum (coming soon)
+- Claim tokens on other LayerZero-supported chains (coming soon)
+
+### Bridge Tokens
+
+- Bridge tokens between supported chains
+- Maintain token supply across chains
+- Seamless cross-chain transfers
+
+## How It Will Work (Planned)
+
+### Token Distribution
+
+When a token is launched with cross-chain support:
+
+1. Token is created on Solana (primary chain)
+2. OFT bridge is configured automatically
+3. Token becomes claimable on secondary chains
+
+### Claiming Process
+
+```
+Token on Solana → OFT Bridge → Token on Target Chain
+```
+
+### Claiming Steps (Planned)
+
+1. **Verify Token Supports OFT**: Check if token has cross-chain support
+2. **Connect Target Chain Wallet**: Connect wallet for desired chain
+3. **Initiate Claim**: Start cross-chain claim process
+4. **Bridge Processing**: LayerZero processes the transfer
+5. **Token Receipt**: Receive tokens on target chain
+
+## Stay Updated
+
+To be notified when OFT claiming becomes available:
+
+- Check the [Zaunchpad GitHub](https://github.com/zaunchpad/zaunchpad) for updates
+- Follow our announcements
+- Monitor the documentation for feature releases
+
+## Current Claiming Options
+
+While OFT claiming is under development, you can:
+
+- **Claim on Solana**: Use ZK proofs to claim tokens directly on Solana
+- **View Your Dashboard**: Track all your purchases and claims
+- **Manage Proofs**: Organize your proof files for future claims
+
+See [How to Claim Token](/docs/user-steps#how-to-claim-token) for current claiming instructions.
+
+## Resources
+
+- [LayerZero Documentation](https://docs.layerzero.network)
+- [OFT Standard](https://docs.layerzero.network/contracts/oft)
+- [Zaunchpad GitHub](https://github.com/zaunchpad/zaunchpad)

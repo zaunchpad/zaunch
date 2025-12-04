@@ -1,0 +1,204 @@
+# Architecture
+
+Zaunchpad is built with a modular architecture that supports privacy-first token launches using ZK proof verification on Solana.
+
+## System Overview
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Frontend (Next.js)                   │
+│  - Token creation UI                                    │
+│  - Launchpad interface                                  │
+│  - Wallet integration (Solana, NEAR)                    │
+│  - Token metadata management                            │
+│  - IPFS storage (client-side)                           │
+│  - Proof ZIP handling                                   │
+└────────────────────┬────────────────────────────────────┘
+                     │
+        ┌────────────┴────────────┐
+        │                         │
+┌───────▼────────┐      ┌─────────▼──────────┐
+│   Solana       │      │      NEAR          │
+│  - ZK Launchpad│      │  - NEAR Intents    │
+│    Program     │      │  - OneClick Swap   │
+│  - SPL Tokens  │      │  - Smart Contracts │
+└────────────────┘      └────────────────────┘
+        │                         │
+        └────────────┬────────────┘
+                     │
+        ┌────────────▼────────────┐
+        │   Phala TEE Network     │
+        │  - Proof Generation     │
+        │  - Swap Verification    │
+        │  - ZK-SNARK Creation    │
+        └─────────────────────────┘
+                     │
+        ┌────────────▼────────────┐
+        │   Zcash Shielded Pools  │
+        │  - Privacy Layer        │
+        │  - Anonymity Set        │
+        │  - Deposit Settlement   │
+        └─────────────────────────┘
+```
+
+## Core Components
+
+### Frontend
+
+Built with Next.js 15 and TypeScript, the frontend provides:
+
+- **Token Creation Interface**: User-friendly forms for launching tokens
+- **Launch Management**: Create and manage token launches
+- **Wallet Integration**: Support for Solana and NEAR wallets
+- **Token Metadata Management**: Handle token metadata directly in frontend
+- **IPFS Storage**: Client-side IPFS integration for immutable metadata
+- **Proof Handling**: Download, store, and manage ZK proof ZIP files
+- **Query Interface**: Query launches and active token sales
+- **Claim Interface**: Claim tokens using ZK proofs
+
+
+### Solana Program (ZK Proof Launchpad)
+
+The core Solana program handles token launches with ZK proof verification:
+
+**Program ID (Devnet):** `HDFv1zjKQzvHuNJeH7D6A8DFKAxwJKw8X47qW4MYxYpA`
+
+**Key Features:**
+- **Launch Creation**: Create token launches with configurable parameters
+- **Proof Verification**: Verify ZK-SNARK proofs before token claims
+- **Token Distribution**: Distribute tokens to verified claimers
+- **Replay Protection**: Prevent proof reuse via nullifier PDAs
+- **Deposit Protection**: Each deposit address can only claim once globally
+- **Time Enforcement**: Claims only allowed after launch end time
+
+### Phala TEE Network
+
+Trusted Execution Environment for secure proof generation:
+
+**Functions:**
+- **Swap Verification**: Verify OneClick swap status via API
+- **Proof Generation**: Generate ZK-SNARK proofs for verified swaps
+- **Launch Management**: Track launches and proof references
+- **Security**: Execute in secure TEE environment
+
+**Verification Process:**
+1. Check swap status is SUCCESS (via OneClick API)
+2. Verify recipient matches creator
+3. Confirm destination asset is ZEC (nep141:zec.omft.near)
+4. Generate ZK-SNARK proof with unique reference
+
+### Blockchain Integrations
+
+#### Solana
+
+- **ZK Launchpad Program**: Custom Solana program for token launches
+- **SPL Tokens**: Standard token creation and management
+- **Anchor Framework**: Smart contract development
+- **Transaction Building**: Compact transaction creation for claims
+
+#### NEAR
+
+- **NEAR Intents**: Declarative cross-chain operations
+- **OneClick Swap**: Automated token swaps to ZEC
+- **Smart Contracts**: NEAR protocol integration
+- **Wallet Selector**: Multi-wallet support
+
+### Privacy Layer
+
+#### Zcash Shielded Pools
+
+- **Shielded Transactions**: Private transaction execution
+- **Anonymity Set**: Privacy guarantees based on pool size
+- **Zero-Knowledge Proofs**: Cryptographic privacy verification
+- **Deposit Settlement**: All deposits settle in Zcash shielded pools
+
+## Data Flow
+
+### Creating a Launch
+
+1. **User Input**: Creator fills launch form with token details
+2. **Metadata Creation**: Token metadata created in frontend
+3. **IPFS Upload**: Metadata uploaded to IPFS (client-side)
+4. **Launch Creation**: `createLaunch` transaction sent to Solana program
+5. **Program Deployment**: Launch PDA created with parameters
+6. **Token Minting**: SPL token minted and vault initialized
+
+### Participating in a Launch
+
+1. **Deposit**: User deposits any token via NEAR Intents/OneClick
+2. **Swap to ZEC**: System automatically swaps to Zcash (nep141:zec.omft.near)
+3. **TEE Verification**: Phala TEE verifies swap success
+4. **Proof Generation**: TEE generates ZK-SNARK proof
+5. **Proof Download**: User downloads proof ZIP file
+6. **Claim Preparation**: User loads proof from ZIP
+7. **Claim Transaction**: User creates and submits claim transaction
+8. **Program Verification**: Solana program verifies proof
+9. **Token Distribution**: Tokens transferred to user's wallet
+
+### Token Economics
+
+| Parameter | Description |
+|-----------|-------------|
+| `total_supply` | Total tokens minted |
+| `amount_to_sell` | Tokens for claims (goes to vault) |
+| `price_per_token` | Price in micro-USD (USD × 10^6). Example: $0.01 = 10000 |
+| `min_amount_to_sell` | Optional minimum (0 = no minimum required) |
+| `creator_wallet` | ZEC address that receives creator allocation |
+| `tokens_per_proof` | Number of tokens per proof claim |
+
+## Security Considerations
+
+### Proof Replay Protection
+
+- **Nullifier PDA**: Each proof can only be used once
+- **Deposit Address Protection**: Each deposit address can only claim once globally
+- **Unique Proof References**: Each proof gets a unique reference (e.g., `zk_proof_a1b2c3d4`)
+
+### Time Enforcement
+
+- **Start Time**: Launches begin at specified `start_time`
+- **End Time**: Claims only allowed after `end_time`
+- **Blockchain Timestamps**: Uses Solana's clock for verification
+
+### TEE Verification
+
+- **Swap Verification**: TEE verifies swap status before proof generation
+- **Recipient Verification**: Confirms swap recipient matches launch creator
+- **Asset Verification**: Ensures destination asset is ZEC
+- **Secure Execution**: All verification in Phala TEE environment
+
+### Smart Contract Security
+
+- **Program Audits**: Contracts should be audited before mainnet deployment
+- **PDA Security**: All accounts use Program Derived Addresses
+- **Access Control**: Only authorized users can create launches
+- **Immutable Parameters**: Launch parameters cannot be changed after creation
+
+## Launch Parameters
+
+When creating a launch, you configure:
+
+- **Basic Info**: Name, description, creator wallet
+- **Timing**: Start time, end time
+- **Token Details**: Name, symbol, URI, decimals
+- **Economics**: Total supply, amount to sell, price per token
+- **Limits**: Max claims per user, minimum amount to sell
+- **Allocation**: Tokens per proof
+
+## Query Functions
+
+The frontend provides query functions for:
+
+- **All Launches**: `getAllLaunches(connection)`
+- **Active Launches**: `getActiveLaunches(connection)`
+- **Launch Details**: Query specific launch by PDA
+- **User Claims**: Check user's claim status
+- **TEE Launch Data**: Query launches and proofs from TEE endpoint
+
+## Future Enhancements
+
+- Cross-chain bridge integration (LayerZero OFT) - *Coming soon*
+- Enhanced anonymity set management
+- Additional chain support
+- Automated liquidity management
+- Refund automation via TukTuk by Helium

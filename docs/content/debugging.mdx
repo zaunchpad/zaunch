@@ -1,0 +1,260 @@
+# Debugging
+
+This guide helps you troubleshoot common issues when using Zaunchpad. Follow these steps to diagnose and resolve problems.
+
+## Common Issues
+
+### Transaction Failures
+
+#### Issue: Transaction Rejected
+
+**Symptoms:**
+- Transaction fails immediately
+- Error message in wallet
+- No blockchain confirmation
+
+**Solutions:**
+1. **Check Wallet Balance**: Ensure sufficient funds for gas fees
+2. **Verify Network**: Confirm you're on the correct network
+3. **Increase Gas Limit**: Try increasing gas limit in wallet settings
+4. **Check Contract Status**: Verify token contract is not paused
+5. **Retry Transaction**: Sometimes network congestion causes failures
+
+#### Issue: Transaction Stuck
+
+**Symptoms:**
+- Transaction pending for extended time
+- No confirmation after several minutes
+- Stuck in "Processing" state
+
+**Solutions:**
+1. **Check Network Status**: Verify blockchain network is operational
+2. **View on Explorer**: Check transaction on blockchain explorer
+3. **Wait Longer**: Some networks can take 10-30 minutes
+4. **Cancel and Retry**: Cancel stuck transaction and try again
+5. **Contact Support**: If stuck > 1 hour, contact support
+
+### Wallet Connection Issues
+
+#### Issue: Wallet Won't Connect
+
+**Symptoms:**
+- Wallet extension not detected
+- Connection button doesn't work
+- Error when trying to connect
+
+**Solutions:**
+1. **Refresh Page**: Hard refresh (Ctrl+Shift+R or Cmd+Shift+R)
+2. **Check Extension**: Verify wallet extension is installed and enabled
+3. **Update Extension**: Ensure wallet extension is up to date
+4. **Try Different Wallet**: Test with alternative wallet
+5. **Clear Cache**: Clear browser cache and cookies
+6. **Check Permissions**: Verify extension has necessary permissions
+
+#### Issue: Wrong Network
+
+**Symptoms:**
+- Transactions fail with "wrong network" error
+- Token not visible
+- Incorrect chain displayed
+
+**Solutions:**
+1. **Switch Network**: Use wallet to switch to correct network
+2. **Add Network**: If network missing, add it manually
+3. **Verify Chain**: Confirm you're on the right chain (Solana/NEAR)
+4. **Check RPC**: Ensure RPC endpoint is correct
+
+### Token Issues
+
+#### Issue: Tokens Not Appearing
+
+**Symptoms:**
+- Tokens don't show in wallet
+- Balance shows zero
+- Transaction confirmed but no tokens
+
+**Solutions:**
+1. **Wait for Confirmation**: Allow time for blockchain confirmation
+2. **Refresh Wallet**: Refresh or restart wallet application
+3. **Add Token Manually**: Add token contract address to wallet
+4. **Check Address**: Verify correct wallet address
+5. **View on Explorer**: Check transaction on blockchain explorer
+6. **Check Spam**: Some wallets hide tokens in spam folder
+
+#### Issue: Wrong Token Amount
+
+**Symptoms:**
+- Received different amount than expected
+- Balance doesn't match transaction
+- Partial token receipt
+
+**Solutions:**
+1. **Check Transaction**: Review transaction details on explorer
+2. **Verify Amount**: Confirm amount sent matches expected
+3. **Check Fees**: Account for gas fees and platform fees
+4. **Review Bonding Curve**: Price may have changed during transaction
+5. **Contact Support**: If amount significantly different, contact support
+
+### Cross-Chain Issues
+
+#### Issue: OFT Claim Fails
+
+**Symptoms:**
+- Claim button doesn't work
+- Transaction fails during claim
+- Tokens not received on target chain
+
+**Solutions:**
+1. **Check Bridge Status**: Verify LayerZero bridge is operational
+2. **Verify Chains**: Ensure both chains are supported
+3. **Check Fees**: Ensure sufficient funds for bridge fees
+4. **Wait for Processing**: Bridge transfers can take 10-30 minutes
+5. **Check Target Wallet**: Verify correct wallet connected for target chain
+6. **Review Transaction**: Check transaction on source chain explorer
+
+#### Issue: Claim Stuck
+
+**Symptoms:**
+- Claim transaction confirmed but tokens not received
+- Stuck in "Processing" state
+- No update after extended time
+
+**Solutions:**
+1. **Check LayerZero Status**: Verify LayerZero network status
+2. **View Transaction**: Check transaction on both chains
+3. **Wait Longer**: Bridge transfers can take time
+4. **Contact Support**: If stuck > 1 hour, provide transaction hash
+5. **Check Target Chain**: Verify target chain is operational
+
+### Privacy/Shielded Pool Issues
+
+#### Issue: Privacy Not Working
+
+**Symptoms:**
+- Transactions appear transparent
+- Anonymity set shows as 1
+- No privacy protection
+
+**Solutions:**
+1. **Verify Privacy Enabled**: Check if token has privacy features
+2. **Check Pool Status**: Verify shielded pool is active
+3. **Wait for Participants**: Anonymity set needs multiple participants
+4. **Review Settings**: Ensure privacy is enabled in token settings
+5. **Check Contract**: Verify smart contract supports privacy
+
+#### Issue: Small Anonymity Set
+
+**Symptoms:**
+- Anonymity set is very small (< 10)
+- Privacy level shows as "Low"
+- Concerned about privacy
+
+**Solutions:**
+1. **Wait for More Participants**: Set grows as more people participate
+2. **Check Token Popularity**: Popular tokens have larger sets
+3. **Consider Timing**: Participate when pool is more active
+4. **Review Privacy Needs**: Evaluate if current set size is acceptable
+5. **Monitor Set Size**: Watch set size over time
+
+## Debugging Tools
+
+### Blockchain Explorers
+
+**Solana:**
+- [Solscan](https://solscan.io)
+- [Solana Explorer](https://explorer.solana.com)
+
+**NEAR:**
+- [NEAR Explorer](https://explorer.near.org)
+- [NEAR Blocks](https://nearblocks.io)
+
+### Transaction Verification
+
+1. **Get Transaction Hash**: Copy from wallet or dashboard
+2. **Open Explorer**: Navigate to appropriate blockchain explorer
+3. **Search Hash**: Paste transaction hash in search
+4. **Review Details**: Check transaction status and details
+5. **Verify Confirmation**: Confirm transaction is confirmed
+
+### Wallet Debugging
+
+1. **Check Wallet Logs**: Most wallets have developer console
+2. **Review Error Messages**: Error messages often indicate the issue
+3. **Test with Small Amount**: Try small transaction first
+4. **Check Network**: Verify correct network selected
+5. **Update Wallet**: Ensure wallet is latest version
+
+## Getting Help
+
+### Before Contacting Support
+
+1. **Check This Guide**: Review relevant troubleshooting steps
+2. **Search FAQ**: Check [FAQ page](/docs/faq) for common questions
+3. **Review Documentation**: Read relevant documentation pages
+4. **Check GitHub Issues**: Search existing issues on GitHub
+5. **Try Solutions**: Attempt suggested solutions
+
+### When Contacting Support
+
+Provide the following information:
+
+- **Transaction Hash**: If applicable
+- **Error Message**: Exact error message received
+- **Steps to Reproduce**: What you did before the issue
+- **Wallet Type**: Which wallet you're using
+- **Network**: Which blockchain network
+- **Screenshots**: Visual evidence of the issue
+
+### Support Channels
+
+- **GitHub Issues**: [github.com/zaunchpad/zaunchpad/issues](https://github.com/zaunchpad/zaunchpad/issues)
+- **Application Support**: Use in-app support if available
+- **Documentation**: Check documentation for answers
+
+## Prevention Tips
+
+### Best Practices
+
+1. **Test First**: Always test with small amounts first
+2. **Verify Details**: Double-check all transaction details
+3. **Check Network**: Ensure correct network before transactions
+4. **Monitor Status**: Watch transaction status in dashboard
+5. **Keep Records**: Save transaction hashes and details
+6. **Stay Updated**: Keep wallet and browser updated
+
+### Before Major Transactions
+
+1. **Verify Balance**: Ensure sufficient funds
+2. **Check Fees**: Understand all fees involved
+3. **Review Parameters**: Confirm all settings are correct
+4. **Test Connection**: Verify wallet connection is stable
+5. **Check Network**: Confirm network is operational
+6. **Read Warnings**: Pay attention to any warnings
+
+## Advanced Debugging
+
+### Developer Tools
+
+If you're a developer:
+
+1. **Check Console**: Browser console for errors
+2. **Review Network Tab**: Check API calls and responses
+3. **Inspect Contracts**: Review smart contract code
+4. **Check RPC**: Verify RPC endpoint responses
+5. **Review Logs**: Check application logs
+
+### Contract Interaction
+
+1. **Verify ABI**: Ensure contract ABI is correct
+2. **Check Methods**: Verify method names and parameters
+3. **Review Events**: Check emitted events
+4. **Test Locally**: Test on testnet first
+5. **Audit Code**: Review contract code for issues
+
+## Resources
+
+- [Zaunchpad GitHub](https://github.com/zaunchpad/zaunchpad)
+- [Solana Documentation](https://docs.solana.com)
+- [NEAR Documentation](https://docs.near.org)
+- [LayerZero Docs](https://docs.layerzero.network)
+

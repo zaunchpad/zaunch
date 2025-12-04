@@ -1,0 +1,237 @@
+# Working with NEAR Intents
+
+NEAR Intents provide a declarative way to coordinate cross-chain operations, enabling seamless deposits from any chain into Zcash shielded pools.
+
+## What are NEAR Intents?
+
+NEAR Intents are declarative statements that describe desired outcomes rather than specific actions. This allows for flexible and composable cross-chain operations.
+
+### Key Concepts
+
+- **Declarative**: You describe what you want, not how to do it
+- **Composable**: Intents can be combined and chained
+- **Cross-Chain**: Native support for multi-chain operations
+- **Settled in TEE**: Executed in Phala Trusted Execution Environment for security
+
+## How NEAR Intents Work in Zaunchpad
+
+### Deposit Flow
+
+When you want to participate in a token launch:
+
+1. **User Intent**: "Deposit ETH/USDC/NEAR and swap to Zcash"
+2. **Intent Created**: NEAR Intent system receives your intent
+3. **OneClick Swap**: Automatic swap to Zcash (nep141:zec.omft.near)
+4. **Shielded Pool Settlement**: ZEC deposited into Zcash shielded pool
+5. **Intent Settled**: All operations complete in TEE
+
+### How NEAR Intents Go into Shielded Pools
+
+The complete flow from deposit to shielded pool:
+
+```
+User Deposit (Any Token)
+    ↓
+NEAR Intents System
+    ↓
+OneClick Swap API
+    ↓
+Swap to ZEC (nep141:zec.omft.near)
+    ↓
+Zcash Shielded Pool
+    ↓
+TEE Verification
+    ↓
+ZK Proof Generation
+```
+
+### Step-by-Step Process
+
+1. **Deposit Initiation**
+   - User deposits any supported token (ETH, USDC, NEAR, etc.)
+   - Intent created: "Swap [amount] of [token] to ZEC"
+
+2. **Automatic Swap**
+   - NEAR Intents coordinates with OneClick Swap
+   - Swap executed automatically
+   - Destination: ZEC on NEAR (nep141:zec.omft.near)
+
+3. **Shielded Pool Entry**
+   - ZEC enters Zcash Unified Shielded Pool
+   - Transaction becomes private
+   - No link between source and destination
+
+4. **TEE Verification**
+   - Phala TEE verifies swap success
+   - Checks swap status via OneClick API
+   - Verifies recipient matches launch creator
+   - Confirms destination is ZEC
+
+5. **Proof Generation**
+   - TEE generates ZK-SNARK proof
+   - Proof acts as claim ticket
+   - Unique reference assigned
+
+## Supported by NEAR Intents
+
+Zaunchpad's integration with NEAR Intents means:
+
+- **Verified Execution**: Intents are settled in Phala Trusted Execution Environment
+- **Security Guarantees**: TEE provides additional security for cross-chain operations
+- **Composability**: Multiple intents can work together seamlessly
+- **Reliability**: Intent system handles failures and retries automatically
+- **Privacy**: All deposits settle in Zcash shielded pools
+
+## Supported Payment Tokens
+
+You can deposit using:
+
+- **ETH**: Ethereum
+- **USDC**: USD Coin (multiple chains)
+- **NEAR**: NEAR Protocol token
+- **Other tokens**: As supported by OneClick Swap
+
+All deposits are automatically swapped to ZEC and settled in shielded pools.
+
+## TEE Verification Process
+
+### What Gets Verified
+
+The Phala TEE verifies:
+
+1. **Swap Status**: Swap completed successfully (SUCCESS status)
+2. **Recipient Match**: Swap recipient matches launch creator address
+3. **Asset Verification**: Destination asset is ZEC (nep141:zec.omft.near)
+4. **Amount Verification**: Correct amount swapped
+
+### Verification Endpoint
+
+**TEE Endpoint:** `https://66a817b166c0b222ae386af54c178986e90beb0a-3000.dstack-pha-prod7.phala.network`
+
+The TEE uses the OneClick API to verify swap status before generating proofs.
+
+## Privacy Benefits
+
+### Shielded Pool Settlement
+
+When your deposit goes through NEAR Intents:
+
+- **Source Privacy**: Your original token source is hidden
+- **Destination Privacy**: ZEC deposit in shielded pool is private
+- **No Link**: No on-chain link between deposit and claim
+- **Anonymity Set**: You blend into the pool of participants
+
+### How Privacy is Maintained
+
+1. **Deposit**: Any token → NEAR Intents → ZEC
+2. **Shielded Entry**: ZEC enters shielded pool privately
+3. **Mixing**: Your transaction mixes with others
+4. **Anonymity**: Your identity hidden in anonymity set
+5. **Claim**: ZK proof allows claim without revealing source
+
+## Using NEAR Intents in Zaunchpad
+
+### For Participants
+
+1. **Select Payment Token**: Choose ETH, USDC, NEAR, or other supported token
+2. **Enter Amount**: Specify how much you want to deposit
+3. **Confirm Intent**: NEAR Intents handles the rest automatically
+4. **Wait for Swap**: System swaps to ZEC automatically
+5. **Shielded Settlement**: ZEC enters shielded pool
+6. **Proof Generation**: TEE generates your claim proof
+
+### For Token Creators
+
+When creating a launch:
+
+- **Payment Options**: Launch accepts deposits in multiple tokens
+- **Automatic Conversion**: All deposits convert to ZEC
+- **Shielded Settlement**: All capital settles in shielded pools
+- **Privacy Guaranteed**: Participants remain anonymous
+
+## Monitoring Intent Status
+
+### During Deposit
+
+1. **Intent Created**: Intent submitted to NEAR Intent system
+2. **Swap Processing**: OneClick swap in progress
+3. **Shielded Entry**: ZEC entering shielded pool
+4. **TEE Verification**: Proof generation in progress
+5. **Complete**: Proof ready for download
+
+### Status Indicators
+
+- **Pending**: Intent created, waiting for execution
+- **Processing**: Swap and settlement in progress
+- **Verifying**: TEE verification in progress
+- **Completed**: Proof generated and ready
+- **Failed**: Intent execution failed (can be retried)
+
+## Troubleshooting
+
+### Swap Fails
+
+- Check if token is supported by OneClick
+- Verify sufficient liquidity for swap
+- Ensure sufficient funds for gas fees
+- Try with different token or amount
+
+### Intent Stuck
+
+- Check network connectivity
+- Verify NEAR Intents system status
+- Review intent parameters
+- Contact support if persists
+
+### Proof Not Generated
+
+- Verify swap completed successfully
+- Check TEE endpoint status
+- Ensure recipient matches creator
+- Verify destination is ZEC
+
+## Best Practices
+
+### For Participants
+
+- **Use Supported Tokens**: Stick to well-supported tokens (ETH, USDC, NEAR)
+- **Check Liquidity**: Ensure sufficient liquidity for swap
+- **Monitor Status**: Watch intent status during deposit
+- **Save Proofs**: Download and save proof ZIP files
+- **Understand Privacy**: Know that deposits settle in shielded pools
+
+### For Token Creators
+
+- **Accept Multiple Tokens**: Enable deposits from various chains
+- **Monitor Deposits**: Track deposits through dashboard
+- **Verify Settlements**: Confirm deposits in shielded pools
+- **Privacy First**: Respect participant privacy
+
+## Technical Details
+
+### Phala Trusted Execution Environment
+
+NEAR Intents are settled in Phala's TEE, which provides:
+
+- **Confidentiality**: Intent details remain private
+- **Integrity**: Intent execution cannot be tampered with
+- **Attestation**: Cryptographic proof of correct execution
+- **Swap Verification**: Verifies OneClick swaps before proof generation
+
+### Intent Lifecycle
+
+1. **Creation**: Intent created with deposit parameters
+2. **Submission**: Intent submitted to NEAR Intent system
+3. **Swap Execution**: OneClick swap to ZEC
+4. **Shielded Entry**: ZEC enters shielded pool
+5. **TEE Execution**: Intent executed in Phala TEE
+6. **Verification**: Swap verified via OneClick API
+7. **Proof Generation**: ZK-SNARK proof created
+8. **Settlement**: Results recorded, proof ready
+
+## Resources
+
+- [NEAR Intents Documentation](https://docs.near.org)
+- [Phala Network](https://phala.network)
+- [OneClick Swap](https://oneclick.fi)
+- [Zaunchpad GitHub](https://github.com/zaunchpad/zaunchpad)
