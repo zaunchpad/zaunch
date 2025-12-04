@@ -282,87 +282,66 @@ export function UserClaimButton({ token, launchAddress }: UserClaimButtonProps) 
       
       console.log('[Claim] Sending transaction...');
       
-      // Send transaction
+      // Send transaction - use same options as deploy for wallet compatibility
       const signature = await sendTransaction(transaction, connection, {
-        skipPreflight: false,
-        preflightCommitment: 'confirmed',
-        maxRetries: 5,
+        skipPreflight: true,  // Skip preflight for better wallet compatibility
+        maxRetries: 3,
       });
       console.log('[Claim] Transaction sent:', signature);
 
-      // Wait for confirmation with extended timeout
-      console.log('[Claim] Waiting for confirmation (this may take a minute on devnet)...');
+      // Wait for confirmation - use same pattern as deploy
+      console.log('[Claim] Waiting for confirmation...');
       
-      let confirmed = false;
-      let txError: string | null = null;
-      
-      // Try to confirm with the original blockhash first
       try {
         const confirmation = await connection.confirmTransaction(
           { signature, blockhash, lastValidBlockHeight },
-          'confirmed'
+          'processed'  // Use 'processed' like deploy for faster confirmation
         );
         
         if (confirmation.value.err) {
-          txError = JSON.stringify(confirmation.value.err);
-        } else {
-          confirmed = true;
-        }
-      } catch (confirmError) {
-        console.log('[Claim] Initial confirmation timed out, checking transaction status...');
-        
-        // If blockhash expired, poll for the transaction status
-        for (let i = 0; i < 30; i++) {  // Poll for up to 30 seconds
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          const txError = JSON.stringify(confirmation.value.err);
+          console.error('[Claim] Transaction error:', txError);
           
-          const status = await connection.getSignatureStatus(signature, {
-            searchTransactionHistory: true,
-          });
-          
-          if (status.value) {
-            if (status.value.err) {
-              txError = JSON.stringify(status.value.err);
-              break;
-            } else if (status.value.confirmationStatus === 'confirmed' || status.value.confirmationStatus === 'finalized') {
-              confirmed = true;
-              console.log('[Claim] Transaction confirmed via polling!');
-              break;
-            }
-          }
-          
-          if (i % 5 === 0) {
-            console.log(`[Claim] Still waiting... (${i}s)`);
+          // Parse common error codes
+          if (txError.includes('101') || txError.includes('Custom(101)')) {
+            throw new Error('This proof has already been used to claim tokens!');
+          } else if (txError.includes('102') || txError.includes('Custom(102)')) {
+            throw new Error('This deposit address has already been used!');
+          } else if (txError.includes('InsufficientTokens') || txError.includes('Custom(5)')) {
+            throw new Error('Insufficient tokens in vault - creator may have claimed unsold tokens');
+          } else if (txError.includes('LaunchInactive') || txError.includes('Custom(1)')) {
+            throw new Error('Launch is no longer active');
+          } else {
+            throw new Error(`Transaction failed: ${txError}`);
           }
         }
-      }
-      
-      // Handle errors
-      if (txError) {
-        console.error('[Claim] Transaction error:', txError);
         
-        // Parse common error codes
-        if (txError.includes('101') || txError.includes('Custom(101)')) {
-          throw new Error('This proof has already been used to claim tokens!');
-        } else if (txError.includes('102') || txError.includes('Custom(102)')) {
-          throw new Error('This deposit address has already been used!');
-        } else if (txError.includes('InsufficientTokens') || txError.includes('Custom(5)')) {
-          throw new Error('Insufficient tokens in vault - creator may have claimed unsold tokens');
-        } else if (txError.includes('LaunchInactive') || txError.includes('Custom(1)')) {
-          throw new Error('Launch is no longer active');
+        console.log('[Claim] Transaction confirmed!');
+      } catch (confirmError: unknown) {
+        // If confirmation times out, check transaction status
+        console.log('[Claim] Confirmation timeout, checking status...');
+        
+        const status = await connection.getSignatureStatus(signature, {
+          searchTransactionHistory: true,
+        });
+        
+        if (status.value?.err) {
+          const txError = JSON.stringify(status.value.err);
+          if (txError.includes('101') || txError.includes('Custom(101)')) {
+            throw new Error('This proof has already been used to claim tokens!');
+          } else if (txError.includes('102') || txError.includes('Custom(102)')) {
+            throw new Error('This deposit address has already been used!');
+          } else {
+            throw new Error(`Transaction failed: ${txError}`);
+          }
+        } else if (status.value?.confirmationStatus) {
+          console.log('[Claim] Transaction status:', status.value.confirmationStatus);
         } else {
-          throw new Error(`Transaction failed: ${txError}`);
+          // Transaction might still be processing
+          console.log('[Claim] Transaction sent. Check explorer:', signature);
+          toast.info(`Transaction sent! Signature: ${signature.slice(0, 8)}...`);
         }
       }
-      
-      if (!confirmed) {
-        // Transaction might still be processing - check explorer
-        console.log('[Claim] Transaction status unknown. Check explorer:', signature);
-        toast.info('Transaction sent but not yet confirmed. Please check Solana Explorer.');
-        setSuccess(`Transaction sent! Check status: ${signature.slice(0, 8)}...`);
-        return;
-      }
-      
-      console.log('[Claim] Transaction confirmed successfully!');
 
       // Update ticket status in localStorage (only for user claims)
       if (proofData.type === 'user_claim') {
