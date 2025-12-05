@@ -15,7 +15,6 @@ import {
   useRef,
 } from 'react';
 import { getRpcSOLEndpoint, getSolPrice, getSolBalance, getTokenBalanceOnSOL } from '@/lib/sol';
-import { calculateDbcSwapQuote, approximateSwapQuote } from '@/lib/meteora';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { toast } from 'sonner';
 import { Connection, PublicKey } from '@solana/web3.js';
