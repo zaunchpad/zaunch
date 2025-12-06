@@ -2,6 +2,7 @@ export default {
   index: 'About Zaunchpad',
   demo: 'Demo',
   architecture: 'Architecture',
+  'tee-proof-generator': 'TEE Proof Generator',
   'user-guides': 'User Guides',
   'near-intents': 'Working with NEAR Intents',
   'oft-claiming': 'Claiming with OFT',
