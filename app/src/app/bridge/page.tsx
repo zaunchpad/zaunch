@@ -451,11 +451,19 @@ export default function BridgePage() {
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   {selectedToken ? (
                     <>
-                      <img
-                        src={selectedToken.image || getTokenIcon(selectedToken.symbol, 'solana')}
-                        alt={selectedToken.symbol}
-                        className="w-4 h-4 sm:w-5 sm:h-5 rounded-full shrink-0 object-cover"
-                      />
+                      {selectedToken.image ? (
+                        <img
+                          src={selectedToken.image}
+                          alt={selectedToken.symbol}
+                          className="w-4 h-4 sm:w-5 sm:h-5 rounded-full shrink-0 object-cover"
+                        />
+                      ) : (
+                        <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full shrink-0 bg-gray-700 flex items-center justify-center">
+                          <span className="text-[8px] sm:text-[10px] text-gray-400 font-rajdhani font-bold">
+                            {selectedToken.symbol.charAt(0)}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex flex-col items-start">
                         <span className="font-rajdhani font-semibold text-xs sm:text-sm md:text-[15px] text-white truncate">
                           {selectedToken.symbol}
@@ -552,11 +560,19 @@ export default function BridgePage() {
                       <>
                         <div className="bg-[#131313] border border-[#393939] flex gap-1.5 sm:gap-2 items-center justify-center pl-1.5 sm:pl-2 pr-2 sm:pr-3 py-1.5 sm:py-2 rounded-full shadow-[0px_0px_10px_0px_rgba(255,255,255,0.04)]">
                           <div className="bg-white rounded-full p-0.5 sm:p-1 w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center overflow-hidden shrink-0">
-                            <img
-                              src={selectedToken.image || getTokenIcon(selectedToken.symbol, 'solana')}
-                              alt={selectedToken.symbol}
-                              className="w-full h-full object-cover rounded-full"
-                            />
+                            {selectedToken.image ? (
+                              <img
+                                src={selectedToken.image}
+                                alt={selectedToken.symbol}
+                                className="w-full h-full object-cover rounded-full"
+                              />
+                            ) : (
+                              <div className="w-full h-full rounded-full bg-gray-700 flex items-center justify-center">
+                                <span className="text-[8px] sm:text-[10px] text-gray-300 font-rajdhani font-bold">
+                                  {selectedToken.symbol.charAt(0)}
+                                </span>
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center gap-1">
                             <span className="font-rajdhani font-semibold text-xs sm:text-sm md:text-[15px] text-white whitespace-nowrap">
@@ -610,11 +626,19 @@ export default function BridgePage() {
                       {selectedToken && (
                         <div className="bg-[#131313] border border-[#393939] flex gap-1.5 sm:gap-2 items-center justify-center pl-1.5 sm:pl-2 pr-2 sm:pr-3 py-1.5 sm:py-2 rounded-full shadow-[0px_0px_10px_0px_rgba(255,255,255,0.04)] shrink-0">
                           <div className="bg-white rounded-full p-0.5 sm:p-1 w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center overflow-hidden shrink-0">
-                            <img
-                              src={selectedToken.image || getTokenIcon(selectedToken.symbol, 'solana')}
-                              alt={wrappedTokenSymbol}
-                              className="w-full h-full object-cover rounded-full"
-                            />
+                            {selectedToken.image ? (
+                              <img
+                                src={selectedToken.image}
+                                alt={wrappedTokenSymbol}
+                                className="w-full h-full object-cover rounded-full"
+                              />
+                            ) : (
+                              <div className="w-full h-full rounded-full bg-gray-700 flex items-center justify-center">
+                                <span className="text-[8px] sm:text-[10px] text-gray-300 font-rajdhani font-bold">
+                                  {selectedToken.symbol.charAt(0)}
+                                </span>
+                              </div>
+                            )}
                           </div>
                           <span className="font-rajdhani font-semibold text-xs sm:text-sm md:text-[15px] text-white whitespace-nowrap">
                             {wrappedTokenSymbol}
@@ -749,11 +773,13 @@ export default function BridgePage() {
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <FileX className="w-16 h-16 text-gray-600 mb-4" />
                   <p className="text-gray-500 font-rajdhani text-sm">
-                    No tokens available
+                    {tokenSearchQuery ? 'No tokens match your search' : (connected ? 'No tokens found in your wallet' : 'No tokens available')}
                   </p>
-                  <p className="text-gray-600 font-rajdhani text-xs mt-1">
-                    {tokenSearchQuery ? 'No tokens match your search' : 'Connect your wallet to see tokens'}
-                  </p>
+                  {!tokenSearchQuery && !connected && (
+                    <p className="text-gray-600 font-rajdhani text-xs mt-1">
+                      Connect your wallet to see tokens
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col gap-1">
@@ -768,11 +794,19 @@ export default function BridgePage() {
                       className="w-full px-3 py-3 rounded-lg hover:bg-[#1a1a1a] transition-colors flex items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <img
-                          src={token.image || getTokenIcon(token.symbol, 'solana')}
-                          alt={token.symbol}
-                          className="w-8 h-8 rounded-full shrink-0 object-cover"
-                        />
+                        {token.image ? (
+                          <img
+                            src={token.image}
+                            alt={token.symbol}
+                            className="w-8 h-8 rounded-full shrink-0 object-cover"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full shrink-0 bg-gray-700 flex items-center justify-center">
+                            <span className="text-xs text-gray-300 font-rajdhani font-bold">
+                              {token.symbol.charAt(0)}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex flex-col items-start min-w-0">
                           <span className="font-rajdhani font-semibold text-sm text-white">
                             {token.symbol}
