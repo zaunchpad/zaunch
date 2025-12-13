@@ -15,7 +15,6 @@ const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xW
 const SYSVAR_RENT_PUBKEY = new PublicKey('SysvarRent111111111111111111111111111111111');
 const PROGRAM_ID = new PublicKey(LAUNCH_PROGRAM_ID);
 
-
 export interface LaunchParams {
   name: string;
   description: string;

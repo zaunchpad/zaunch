@@ -75,7 +75,7 @@ export default function Header() {
             <Link href="/" className="flex items-center gap-2">
               <div className="relative w-8 h-8 rounded-full overflow-hidden">
                 <img
-                  src="https://www.figma.com/api/mcp/asset/d49b160e-ee57-43e4-b824-9fc293d3a6eb"
+                  src="/logo.png"
                   alt="Zaunchpad"
                   className="w-full h-full object-cover"
                 />
@@ -112,6 +112,14 @@ export default function Header() {
               }`}
             >
               MY TICKETS
+            </Link>
+            <Link
+              href="/bridge"
+              className={`font-rajdhani font-medium text-sm text-gray-400 hover:text-white transition-colors leading-[20px] uppercase pb-0.5 ${
+                pathname === '/bridge' ? 'border-b border-[#d08700] text-white' : ''
+              }`}
+            >
+              BRIDGE
             </Link>
           </nav>
 
@@ -232,9 +240,18 @@ export default function Header() {
               >
                 MY TICKETS
               </Link>
+              <Link
+                href="/bridge"
+                className={`font-rajdhani font-medium text-lg text-gray-400 hover:text-white transition-colors uppercase pb-1 ${
+                  pathname === '/bridge' ? 'border-b-2 border-[#d08700] text-white' : ''
+                }`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                BRIDGE
+              </Link>
             </nav>
-            <div className="absolute bottom-16 left-0 right-0 px-3">
-              <div className="flex items-center justify-between border-b border-[rgba(208,135,0,0.15)] pb-4">
+            <div className="flex flex-col gap-4 border-t border-[rgba(208,135,0,0.42)] pt-4">
+              <div className="flex items-center justify-between border-b border-[rgba(208,135,0,0.15)] pb-2 pt-2">
                 <span className="font-rajdhani font-semibold text-[#b3b3b3] text-sm">
                   ZEC Price
                 </span>

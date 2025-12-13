@@ -2,7 +2,11 @@
 
 import Image from 'next/image';
 import { Navbar } from 'nextra-theme-docs';
+<<<<<<< HEAD
+import { Group, Text, useMantineColorScheme, Anchor } from '@mantine/core';
+=======
 import { Group, Text, useMantineColorScheme, Anchor, Box } from '@mantine/core';
+>>>>>>> origin/main
 import { ColorSchemeControl } from '../ColorSchemeControl/ColorSchemeControl';
 import { Logo } from '../Logo/Logo';
 import { MantineNextraThemeObserver } from '../MantineNextraThemeObserver/MantineNextraThemeObserver';
@@ -13,6 +17,9 @@ export const MantineNavBar = () => {
   return (
     <>
       <MantineNextraThemeObserver />
+<<<<<<< HEAD
+      <Navbar
+=======
       <Box
         style={{
           position: 'sticky',
@@ -22,6 +29,7 @@ export const MantineNavBar = () => {
         }}
       >
         <Navbar
+>>>>>>> origin/main
         logo={
           <Group align="center" gap={8}>
             <Logo />
@@ -36,7 +44,10 @@ export const MantineNavBar = () => {
           </Group>
         }
         projectLink="https://github.com/zaunchpad/zaunchpad"
+<<<<<<< HEAD
+=======
         chatLink='https://discord.gg/Pbn8Hs2D'
+>>>>>>> origin/main
       >
         <Group gap="md">
           <Anchor
@@ -56,7 +67,10 @@ export const MantineNavBar = () => {
           <ColorSchemeControl />
         </Group>
       </Navbar>
+<<<<<<< HEAD
+=======
       </Box>
+>>>>>>> origin/main
     </>
   );
 };

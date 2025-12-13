@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { Coins, Shield, Ticket } from 'lucide-react';
 
 const solutions = [
   {
@@ -8,21 +9,21 @@ const solutions = [
     title: 'Pay in any token',
     description:
       'Flexible payment options across multiple blockchains and assets. Contribute using ETH, USDC, NEAR, or other supported tokens from any chain.',
-    icon: 'https://www.figma.com/api/mcp/asset/0e017655-60f4-4272-b8e2-ba83120c6e70',
+    icon: Coins,
   },
   {
     id: '02',
     title: 'The Shielded Settlement',
     description:
       "All transactions protected by Zcash's privacy-preserving technology. Your contributions are completely shielded from public blockchain surveillance.",
-    icon: 'https://www.figma.com/api/mcp/asset/35ac0030-f49f-4243-ad24-0d8eca7b018d',
+    icon: Shield,
   },
   {
     id: '03',
     title: 'Claim via ZK Proof Tickets',
     description:
       'Claim tokens on Solana using zero-knowledge proof tickets. No on-chain link between your funding source and claim destination.',
-    icon: 'https://www.figma.com/api/mcp/asset/f4d15114-5a6b-444a-aed1-673ec77bc17e',
+    icon: Ticket,
   },
 ];
 
@@ -79,8 +80,8 @@ export default function LandingSolutions() {
                 <span className="font-rajdhani font-medium text-base md:text-lg text-[#d08700]">
                   {solution.id}
                 </span>
-                <div className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0">
-                  <img src={solution.icon} alt="" className="w-full h-full" />
+                <div className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0 text-[#d08700]">
+                  <solution.icon className="w-full h-full" />
                 </div>
               </div>
 

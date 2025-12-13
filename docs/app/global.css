@@ -7,6 +7,8 @@
 
   :where(.dark) {
     --x-color-neutral-800: var(--mantine-color-dark-6);
+<<<<<<< HEAD
+=======
     --x-color-nextra-bg: #000000;
   }
 
@@ -60,6 +62,7 @@
   :where(.dark) [class*="main"],
   :where(.dark) [class*="content"] {
     background-color: #000000 !important;
+>>>>>>> origin/main
   }
 
   .x\:text-sm {

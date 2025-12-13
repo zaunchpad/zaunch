@@ -207,6 +207,18 @@ interface AvailabilityInfo {
   ticketsCreated: number;
 }
 
+// Individual ticket tracking for multi-ticket purchases
+interface TicketPayment {
+  ticketNumber: number;
+  depositAddress: string;
+  depositMemo: string | null;
+  depositAmount: string;
+  purchaseInfo: any | null;
+  swapStatus: StatusResponse | null;
+  ticketData: TicketData | null;
+  status: 'pending' | 'waiting-payment' | 'confirming' | 'generating-proof' | 'completed' | 'failed';
+}
+
 // Deposit workflow state interface
 interface DepositState {
   depositAmount: string;
@@ -222,7 +234,7 @@ interface DepositState {
   lastCheckedAt: number | null;
   ticketData: TicketData | null;
   nearTxHash: string | null;
-  depositFlowState: 'initial' | 'qr-code' | 'detecting' | 'generating-ticket' | 'success';
+  depositFlowState: 'initial' | 'qr-code' | 'detecting' | 'generating-ticket' | 'success' | 'multi-ticket';
   // Token selection
   availableTokens: OneClickToken[];
   selectedBlockchain: string;
@@ -234,6 +246,11 @@ interface DepositState {
   loadingAvailability: boolean;
   showTokenDropdown: boolean;
   zecToken: OneClickToken | null;
+  // Multi-ticket support
+  ticketQuantity: number;
+  ticketPayments: TicketPayment[];
+  currentTicketIndex: number;
+  completedTickets: TicketData[];
 }
 
 function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
@@ -290,10 +307,16 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
     loadingAvailability: false,
     showTokenDropdown: false,
     zecToken: null,
+    // Multi-ticket support
+    ticketQuantity: 1,
+    ticketPayments: [],
+    currentTicketIndex: 0,
+    completedTickets: [],
   });
 
   const [isPending, startTransition] = useTransition();
   const statusPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const statusPollIntervalsRef = useRef<Map<number, NodeJS.Timeout>>(new Map()); // Track multiple polling intervals per ticket
   const quoteTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
@@ -614,12 +637,16 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
   const [teeResult, setTeeResult] = useState<TEEProofResult | null>(null);
 
   // Generate ticket from TEE - calls real TEE endpoint with encryption
-  const generateTicketFromTEE = useCallback(async (depositAddress: string, swapStatus: StatusResponse) => {
+  const generateTicketFromTEE = useCallback(async (depositAddress: string, swapStatus: StatusResponse, ticketNumber?: number) => {
     setDepositState((prev) => ({ ...prev, depositFlowState: 'generating-ticket', isGeneratingTicket: true }));
-    
+
     try {
       console.log('[TEE] Starting proof generation for deposit:', depositAddress);
-      
+      console.log('[TEE] Ticket number:', ticketNumber || 1);
+
+      // For multi-ticket flow, generate proof for SINGLE ticket only
+      const tokensForThisTicket = BigInt(token.tokensPerProof);
+
       // Call TEE with encrypted request
       const result = await generateProofFromTEE({
         depositAddress: depositAddress,
@@ -632,7 +659,7 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
         pricePerToken: token.pricePerToken.toString(),
         amountToSell: token.amountToSell.toString(),
         decimals: token.decimals,
-        tokensPerProof: token.tokensPerProof.toString(),
+        tokensPerProof: tokensForThisTicket.toString(), // Single ticket amount
       });
       
       // Check if verification passed
@@ -696,18 +723,48 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
         proofReference: ticketData.proofReference,
         claimAmount: ticketData.claimAmount,
         claimAmountFormatted: ticketData.claimAmountFormatted,
+        ticketNumber: ticketNumber || 1,
       });
-      
-      setDepositState((prev) => ({ 
-        ...prev, 
-        depositFlowState: 'success',
-        ticketData,
-        isGeneratingTicket: false,
-      }));
-      
-      toast.success('Ticket generated successfully!');
-      fetchUserBalances();
-      
+
+      // Update the specific ticket's status and data (find by deposit address)
+      setDepositState((prev) => {
+        const updatedPayments = [...prev.ticketPayments];
+        const ticketIndex = updatedPayments.findIndex(t => t.depositAddress === depositAddress);
+
+        if (ticketIndex !== -1 && updatedPayments[ticketIndex]) {
+          updatedPayments[ticketIndex] = {
+            ...updatedPayments[ticketIndex],
+            ticketData,
+            status: 'completed',
+          };
+        }
+
+        const completedTickets = [...prev.completedTickets, ticketData];
+
+        // Check if all tickets are completed
+        const allCompleted = updatedPayments.every(t => t.status === 'completed');
+
+        if (allCompleted) {
+          // All tickets completed
+          return {
+            ...prev,
+            ticketPayments: updatedPayments,
+            completedTickets,
+            depositFlowState: 'success',
+            ticketData, // Store last ticket for download
+            isGeneratingTicket: false,
+          };
+        } else {
+          // More tickets to process - keep in multi-ticket mode
+          return {
+            ...prev,
+            ticketPayments: updatedPayments,
+            completedTickets,
+            isGeneratingTicket: false,
+          };
+        }
+      });
+
       // Refresh availability after ticket creation
       try {
         const updatedAvailability = await checkLaunchAvailability({
@@ -729,17 +786,27 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
       } catch (e) {
         console.error('[Availability] Failed to refresh after ticket:', e);
       }
-      
+
+      const allTicketsCompleted = depositState.ticketPayments.every(t => t.status === 'completed');
+
+      if (allTicketsCompleted) {
+        toast.success('All tickets generated successfully!');
+        fetchUserBalances();
+      } else {
+        toast.success(`Ticket ${ticketNumber || 1} generated! You can continue with other tickets.`);
+        fetchUserBalances();
+      }
+
     } catch (error) {
       console.error('[TEE] Error generating ticket:', error);
       toast.error(`Failed to generate ticket: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setDepositState((prev) => ({ 
-        ...prev, 
-        depositFlowState: 'detecting',
+      setDepositState((prev) => ({
+        ...prev,
+        depositFlowState: depositState.ticketQuantity > 1 ? 'multi-ticket' : 'detecting',
         isGeneratingTicket: false,
       }));
     }
-  }, [token, address, publicKey, depositState.purchaseInfo, fetchUserBalances]);
+  }, [token, address, publicKey, depositState.purchaseInfo, depositState.ticketPayments, fetchUserBalances]);
 
   // Download ticket as ZIP file with proof data from TEE
   const downloadTicketZip = useCallback(async () => {
@@ -798,14 +865,6 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
           amountFormatted: ticketData.claimAmountFormatted,
           pricePerTokenMicroUsd: ticketData.pricePerToken,
         },
-
-        // Note: In production, this would include actual proof data from TEE
-        // proof: {
-        //   proof_a: [...],
-        //   proof_b: [...],
-        //   proof_c: [...],
-        //   public_inputs: [...],
-        // }
       };
 
       // Add metadata JSON
@@ -862,47 +921,176 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
     }
   }, [depositState.ticketData]);
 
+  // Generate deposit address for a single ticket
+  const generateSingleTicketAddress = useCallback(async (ticketNumber: number, singleTicketAmount: string) => {
+    if (!depositState.selectedToken || !depositState.zecToken) {
+      return null;
+    }
+
+    const creatorWallet = token.creatorWallet;
+    if (!creatorWallet || creatorWallet.trim() === '') {
+      throw new Error('Creator wallet not found');
+    }
+
+    // Convert amount to smallest unit
+    const amountInSmallestUnit = convertToUnit(singleTicketAmount, depositState.selectedToken.decimals);
+
+    // Get refund address for the selected blockchain
+    const refundAddress = getRefundAddress(depositState.selectedBlockchain);
+    if (!refundAddress) {
+      throw new Error('Refund address not configured');
+    }
+
+    // Calculate fee (0.5% privacy fee)
+    const feeAmount = parseFloat(singleTicketAmount) * 0.005;
+    const feeBasisPoints = calculateBasisPoints(feeAmount, parseFloat(singleTicketAmount));
+
+    // Create swap quote for THIS SINGLE TICKET
+    const quote = await createSwapQuote({
+      originAsset: depositState.selectedToken.assetId,
+      destinationAsset: depositState.zecToken.assetId,
+      amount: amountInSmallestUnit,
+      recipient: creatorWallet,
+      refundTo: refundAddress,
+      appFees: [
+        {
+          recipient: creatorWallet,
+          fee: feeBasisPoints,
+        },
+      ],
+    });
+
+    const purchaseInfo = {
+      expectedOut: quote.quote.amountOutFormatted,
+      minAmountOut: quote.quote.minAmountOut,
+      timeEstimate: quote.quote.timeEstimate || 60,
+      amountInUsd: quote.quote.amountInUsd,
+      estimatedValueUsd: quote.quote.amountOutUsd || quote.quote.amountInUsd,
+    };
+
+    return {
+      ticketNumber,
+      depositAddress: quote.quote.depositAddress,
+      depositMemo: quote.quote.depositMemo || null,
+      depositAmount: singleTicketAmount,
+      purchaseInfo,
+      swapStatus: null,
+      ticketData: null,
+      status: 'waiting-payment' as const,
+    };
+  }, [depositState.selectedToken, depositState.zecToken, depositState.selectedBlockchain, token.creatorWallet]);
+
+  // Start status polling for a specific ticket (supports multiple concurrent polls)
   const startStatusPolling = useCallback(
-    (depositAddress: string) => {
-      if (statusPollIntervalRef.current) {
-        clearInterval(statusPollIntervalRef.current);
+    (depositAddress: string, ticketIndex: number) => {
+      // Clear any existing polling for this ticket
+      const existingInterval = statusPollIntervalsRef.current.get(ticketIndex);
+      if (existingInterval) {
+        clearInterval(existingInterval);
       }
 
       // Update state to detecting (but keep showing QR code)
-      setDepositState((prev) => ({ ...prev, depositFlowState: 'detecting' }));
+      setDepositState((prev) => ({ ...prev, depositFlowState: prev.ticketQuantity > 1 ? 'multi-ticket' : 'detecting' }));
 
-      statusPollIntervalRef.current = setInterval(async () => {
+      // Update ticket status to confirming
+      setDepositState((prev) => {
+        const updatedPayments = [...prev.ticketPayments];
+        if (updatedPayments[ticketIndex]) {
+          updatedPayments[ticketIndex] = {
+            ...updatedPayments[ticketIndex],
+            status: 'confirming',
+          };
+        }
+        return { ...prev, ticketPayments: updatedPayments };
+      });
+
+      const interval = setInterval(async () => {
         try {
           const status = await checkSwapStatus(depositAddress);
 
-          setDepositState((prev) => ({ ...prev, swapStatus: status, lastCheckedAt: Date.now() }));
+          // Update swap status for this specific ticket
+          setDepositState((prev) => {
+            const updatedPayments = [...prev.ticketPayments];
+            if (updatedPayments[ticketIndex]) {
+              updatedPayments[ticketIndex] = {
+                ...updatedPayments[ticketIndex],
+                swapStatus: status,
+              };
+            }
+            return { ...prev, ticketPayments: updatedPayments, lastCheckedAt: Date.now() };
+          });
 
-          console.log(`[Swap Status] ${status.status}`, status);
+          console.log(`[Swap Status] Ticket ${ticketIndex + 1}: ${status.status}`, status);
 
           if (status.isComplete) {
-            if (statusPollIntervalRef.current) {
-              clearInterval(statusPollIntervalRef.current);
-              statusPollIntervalRef.current = null;
+            // Clear this ticket's polling interval
+            const intervalToClear = statusPollIntervalsRef.current.get(ticketIndex);
+            if (intervalToClear) {
+              clearInterval(intervalToClear);
+              statusPollIntervalsRef.current.delete(ticketIndex);
             }
 
             if (status.isSuccess) {
-              // Generate ticket from TEE
-              generateTicketFromTEE(depositAddress, status);
+              // Update ticket status to generating-proof
+              setDepositState((prev) => {
+                const updatedPayments = [...prev.ticketPayments];
+                if (updatedPayments[ticketIndex]) {
+                  updatedPayments[ticketIndex] = {
+                    ...updatedPayments[ticketIndex],
+                    status: 'generating-proof',
+                  };
+                }
+                return { ...prev, ticketPayments: updatedPayments };
+              });
+
+              // Generate ticket from TEE with ticket number
+              const ticketNumber = ticketIndex + 1;
+              generateTicketFromTEE(depositAddress, status, ticketNumber);
             } else if (status.isFailed) {
-              toast.error(`Swap failed with status: ${status.status}`);
-              setDepositState((prev) => ({ ...prev, depositFlowState: 'detecting' }));
+              toast.error(`Ticket ${ticketIndex + 1} swap failed with status: ${status.status}`);
+              setDepositState((prev) => {
+                const updatedPayments = [...prev.ticketPayments];
+                if (updatedPayments[ticketIndex]) {
+                  updatedPayments[ticketIndex] = {
+                    ...updatedPayments[ticketIndex],
+                    status: 'waiting-payment',
+                  };
+                }
+                return { ...prev, ticketPayments: updatedPayments };
+              });
             } else if (status.status === 'REFUNDED') {
-              toast.info('Payment was refunded to your wallet.');
-              setDepositState((prev) => ({ ...prev, depositFlowState: 'detecting' }));
+              toast.info(`Ticket ${ticketIndex + 1} payment was refunded to your wallet.`);
+              setDepositState((prev) => {
+                const updatedPayments = [...prev.ticketPayments];
+                if (updatedPayments[ticketIndex]) {
+                  updatedPayments[ticketIndex] = {
+                    ...updatedPayments[ticketIndex],
+                    status: 'waiting-payment',
+                  };
+                }
+                return { ...prev, ticketPayments: updatedPayments };
+              });
             } else if (status.status === 'INCOMPLETE_DEPOSIT') {
-              toast.error('Incomplete deposit. Please send the exact amount.');
-              setDepositState((prev) => ({ ...prev, depositFlowState: 'detecting' }));
+              toast.error(`Ticket ${ticketIndex + 1}: Incomplete deposit. Please send the exact amount.`);
+              setDepositState((prev) => {
+                const updatedPayments = [...prev.ticketPayments];
+                if (updatedPayments[ticketIndex]) {
+                  updatedPayments[ticketIndex] = {
+                    ...updatedPayments[ticketIndex],
+                    status: 'waiting-payment',
+                  };
+                }
+                return { ...prev, ticketPayments: updatedPayments };
+              });
             }
           }
         } catch (error) {
-          console.error('Error polling swap status:', error);
+          console.error(`Error polling swap status for ticket ${ticketIndex + 1}:`, error);
         }
-      }, 10000); // Poll every 10 seconds instead of 5 for less aggressive polling
+      }, 10000); // Poll every 10 seconds
+
+      // Store the interval for this ticket
+      statusPollIntervalsRef.current.set(ticketIndex, interval);
     },
     [generateTicketFromTEE],
   );
@@ -912,7 +1100,7 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
       toast.error('Please select a payment token');
       return;
     }
-    
+
     if (!depositState.depositAmount || parseFloat(depositState.depositAmount) <= 0) {
       toast.error('Ticket price not calculated. Please reselect token.');
       return;
@@ -929,13 +1117,11 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
       return;
     }
 
-    // Check if purchase exceeds available tokens (based on estimated USD value)
-    if (depositState.availability && depositState.purchaseInfo?.estimatedValueUsd) {
-      const maxUsdAvailable = parseFloat(depositState.availability.maxUsdAvailable || '0');
-      const purchaseUsd = parseFloat(depositState.purchaseInfo.estimatedValueUsd);
-      
-      if (purchaseUsd > maxUsdAvailable && maxUsdAvailable > 0) {
-        toast.error(`Purchase exceeds available tokens. Max: ~$${maxUsdAvailable.toFixed(2)} USD`);
+    // Check if quantity exceeds available tickets
+    if (depositState.availability) {
+      const ticketsLeft = Number(token.totalTickets) - (depositState.availability.ticketsCreated || 0);
+      if (depositState.ticketQuantity > ticketsLeft) {
+        toast.error(`Only ${ticketsLeft} ticket(s) available. Please reduce quantity.`);
         return;
       }
     }
@@ -943,73 +1129,63 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
     try {
       setDepositState((prev) => ({ ...prev, isGeneratingAddress: true }));
 
-      // Get creator wallet from token metadata
-      const creatorWallet = token.creatorWallet;
+      // Calculate single ticket price in the selected token
+      const ticketPriceUsd = Number(token.pricePerTicket) / 1_000_000;
+      const singleTicketPriceInToken = ticketPriceUsd / depositState.selectedToken.price;
+      const singleTicketAmount = singleTicketPriceInToken.toFixed(8);
 
-      if (!creatorWallet || creatorWallet.trim() === '') {
-        toast.error('Creator wallet not found. Cannot generate deposit address.');
-        setDepositState((prev) => ({ ...prev, isGeneratingAddress: false }));
-        return;
-      }
-
-      // Convert amount to smallest unit
-      const amountInSmallestUnit = convertToUnit(
-        depositState.depositAmount,
-        depositState.selectedToken.decimals,
-      );
-
-      // Get refund address for the selected blockchain
-      const refundAddress = getRefundAddress(depositState.selectedBlockchain);
-      if (!refundAddress) {
-        toast.error('Refund address not configured for selected blockchain');
-        setDepositState((prev) => ({ ...prev, isGeneratingAddress: false }));
-        return;
-      }
-
-      // Calculate fee (0.5% privacy fee)
-      const feeAmount = parseFloat(depositState.depositAmount) * 0.005;
-      const feeBasisPoints = calculateBasisPoints(feeAmount, parseFloat(depositState.depositAmount));
-
-      // Create swap quote
-      const quote = await createSwapQuote({
-        originAsset: depositState.selectedToken.assetId,
-        destinationAsset: depositState.zecToken.assetId,
-        amount: amountInSmallestUnit,
-        recipient: creatorWallet, // Send ZEC to creator's wallet
-        refundTo: refundAddress,
-        appFees: [
-          {
-            recipient: creatorWallet,
-            fee: feeBasisPoints,
-          },
-        ],
+      // Generate ALL ticket addresses simultaneously
+      console.log(`[Multi-Ticket] Generating addresses for all ${depositState.ticketQuantity} tickets`);
+      
+      const ticketPromises = Array.from({ length: depositState.ticketQuantity }, (_, index) => {
+        const ticketNumber = index + 1;
+        return generateSingleTicketAddress(ticketNumber, singleTicketAmount);
       });
 
-      const purchaseInfo = {
-        expectedOut: quote.quote.amountOutFormatted,
-        minAmountOut: quote.quote.minAmountOut,
-        timeEstimate: quote.quote.timeEstimate || 60,
-        amountInUsd: quote.quote.amountInUsd,
-        estimatedValueUsd: quote.quote.amountOutUsd || quote.quote.amountInUsd,
-      };
+      const allTickets = await Promise.all(ticketPromises);
+
+      // Filter out any null tickets and ensure type safety
+      const validTickets: TicketPayment[] = [];
+      for (const ticket of allTickets) {
+        if (ticket !== null) {
+          validTickets.push(ticket);
+        }
+      }
+
+      if (validTickets.length !== depositState.ticketQuantity) {
+        throw new Error(`Failed to generate all ticket addresses. Generated ${validTickets.length}/${depositState.ticketQuantity}`);
+      }
+
+      // Initialize ticket payments array with all tickets
+      const firstTicket = validTickets[0];
+      if (!firstTicket) {
+        throw new Error('Failed to generate first ticket');
+      }
 
       setDepositState((prev) => ({
         ...prev,
-        depositAddress: quote.quote.depositAddress,
-        depositMemo: quote.quote.depositMemo || null,
-        purchaseInfo,
+        ticketPayments: validTickets,
+        currentTicketIndex: 0, // Default to first ticket
+        depositAddress: firstTicket.depositAddress,
+        depositMemo: firstTicket.depositMemo,
+        purchaseInfo: firstTicket.purchaseInfo,
         isGeneratingAddress: false,
-        depositFlowState: 'qr-code',
+        depositFlowState: depositState.ticketQuantity > 1 ? 'multi-ticket' : 'qr-code',
       }));
 
-      startStatusPolling(quote.quote.depositAddress);
+      // Start polling for all tickets simultaneously
+      validTickets.forEach((ticket, index) => {
+        startStatusPolling(ticket.depositAddress, index);
+      });
 
       toast.success(
-        `Deposit address generated! Send ${depositState.selectedToken.symbol} to this address.`,
+        depositState.ticketQuantity > 1
+          ? `All ${depositState.ticketQuantity} tickets ready! Choose which one to pay for first.`
+          : `Deposit address generated! Send ${singleTicketAmount} ${depositState.selectedToken.symbol}`,
       );
     } catch (error) {
-      console.error('Error generating deposit address:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to generate deposit address');
+      console.error('Error generating deposit addresses:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to generate deposit addresses');
       setDepositState((prev) => ({ ...prev, isGeneratingAddress: false }));
     }
   }, [
@@ -1018,16 +1194,39 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
     depositState.zecToken,
     depositState.selectedBlockchain,
     depositState.availability,
-    depositState.purchaseInfo,
+    depositState.ticketQuantity,
     token,
+    generateSingleTicketAddress,
     startStatusPolling,
   ]);
 
+  // Handle ticket selection - allow user to choose which ticket to pay for
+  const handleTicketSelection = useCallback((ticketIndex: number) => {
+    const ticket = depositState.ticketPayments[ticketIndex];
+    if (!ticket || ticket.status === 'completed') {
+      return; // Don't allow selection of completed tickets
+    }
+
+    setDepositState((prev) => ({
+      ...prev,
+      currentTicketIndex: ticketIndex,
+      depositAddress: ticket.depositAddress,
+      depositMemo: ticket.depositMemo,
+      purchaseInfo: ticket.purchaseInfo,
+    }));
+  }, [depositState.ticketPayments]);
+
   useEffect(() => {
     return () => {
+      // Clear single interval (for backward compatibility)
       if (statusPollIntervalRef.current) {
         clearInterval(statusPollIntervalRef.current);
       }
+      // Clear all multi-ticket intervals
+      statusPollIntervalsRef.current.forEach((interval) => {
+        clearInterval(interval);
+      });
+      statusPollIntervalsRef.current.clear();
     };
   }, []);
 
@@ -1046,6 +1245,36 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
     [fetchPurchaseInfo],
   );
 
+  // Handle ticket quantity change
+  const handleQuantityChange = useCallback(
+    (newQuantity: number) => {
+      if (newQuantity < 1) return;
+
+      // Check if quantity exceeds available tickets
+      if (depositState.availability) {
+        const ticketsLeft = Number(token.totalTickets) - (depositState.availability.ticketsCreated || 0);
+        if (newQuantity > ticketsLeft) {
+          toast.error(`Only ${ticketsLeft} ticket(s) remaining`);
+          return;
+        }
+      }
+
+      setDepositState((prev) => ({ ...prev, ticketQuantity: newQuantity }));
+
+      // Recalculate deposit amount if token is selected
+      if (depositState.selectedToken) {
+        const ticketPriceUsd = Number(token.pricePerTicket) / 1_000_000;
+        const totalPriceUsd = ticketPriceUsd * newQuantity;
+        const totalPriceInToken = totalPriceUsd / depositState.selectedToken.price;
+        const formattedAmount = totalPriceInToken.toFixed(8);
+
+        setDepositState((prev) => ({ ...prev, depositAmount: formattedAmount }));
+        handleDepositAmountChange(formattedAmount);
+      }
+    },
+    [depositState.availability, depositState.selectedToken, token.pricePerTicket, token.totalTickets, handleDepositAmountChange],
+  );
+
   const handleCopyDepositAddress = useCallback(() => {
     if (depositState.depositAddress) {
       navigator.clipboard.writeText(depositState.depositAddress);
@@ -1053,36 +1282,57 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
     }
   }, [depositState.depositAddress]);
 
-  const formatAddress = useCallback((address: string | null) => {
-    if (!address) return '';
-    if (address.length <= 20) return address;
-    return `${address.slice(0, 10)}...${address.slice(-10)}`;
-  }, []);
-
-  // Manual status check function
+  // Manual status check function - checks the currently selected ticket
   const handleManualStatusCheck = useCallback(async () => {
-    if (!depositState.depositAddress) return;
+    const currentTicket = depositState.ticketPayments[depositState.currentTicketIndex];
+    if (!currentTicket?.depositAddress) return;
     
     setDepositState((prev) => ({ ...prev, isCheckingStatus: true }));
     
     try {
-      const status = await checkSwapStatus(depositState.depositAddress);
-      setDepositState((prev) => ({ ...prev, swapStatus: status, lastCheckedAt: Date.now() }));
+      const status = await checkSwapStatus(currentTicket.depositAddress);
+      
+      // Update the specific ticket's swap status
+      setDepositState((prev) => {
+        const updatedPayments = [...prev.ticketPayments];
+        if (updatedPayments[prev.currentTicketIndex]) {
+          updatedPayments[prev.currentTicketIndex] = {
+            ...updatedPayments[prev.currentTicketIndex],
+            swapStatus: status,
+          };
+        }
+        return { ...prev, ticketPayments: updatedPayments, lastCheckedAt: Date.now() };
+      });
       
       if (status.isComplete && status.isSuccess) {
-        // Stop polling
-        if (statusPollIntervalRef.current) {
-          clearInterval(statusPollIntervalRef.current);
-          statusPollIntervalRef.current = null;
+        // Stop polling for this ticket
+        const ticketIndex = depositState.currentTicketIndex;
+        const intervalToClear = statusPollIntervalsRef.current.get(ticketIndex);
+        if (intervalToClear) {
+          clearInterval(intervalToClear);
+          statusPollIntervalsRef.current.delete(ticketIndex);
         }
         
-        toast.success('Deposit confirmed! Generating your ticket...');
+        // Update ticket status to generating-proof
+        setDepositState((prev) => {
+          const updatedPayments = [...prev.ticketPayments];
+          if (updatedPayments[prev.currentTicketIndex]) {
+            updatedPayments[prev.currentTicketIndex] = {
+              ...updatedPayments[prev.currentTicketIndex],
+              status: 'generating-proof',
+            };
+          }
+          return { ...prev, ticketPayments: updatedPayments };
+        });
+
+        const ticketNumber = depositState.currentTicketIndex + 1;
+        toast.success(`Ticket ${ticketNumber} deposit confirmed! Generating your ticket...`);
         // Generate ticket from TEE
-        await generateTicketFromTEE(depositState.depositAddress, status);
+        await generateTicketFromTEE(currentTicket.depositAddress, status, ticketNumber);
       } else if (status.isComplete && status.isFailed) {
-        toast.error(`Swap failed: ${status.status}`);
+        toast.error(`Ticket ${depositState.currentTicketIndex + 1} swap failed: ${status.status}`);
       } else {
-        toast.info(`Status: ${status.status}. Please wait or try again in a minute.`);
+        toast.info(`Ticket ${depositState.currentTicketIndex + 1} status: ${status.status}. Please wait or try again in a minute.`);
       }
     } catch (error) {
       console.error('Error checking status:', error);
@@ -1090,10 +1340,360 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
     } finally {
       setDepositState((prev) => ({ ...prev, isCheckingStatus: false }));
     }
-  }, [depositState.depositAddress, generateTicketFromTEE]);
+  }, [depositState.ticketPayments, depositState.currentTicketIndex, generateTicketFromTEE]);
+
+  // State for viewing all tickets at once
+  const [showAllTickets, setShowAllTickets] = useState(false);
+  const [expandedTicketIndex, setExpandedTicketIndex] = useState<number | null>(null);
 
   // Render deposit flow states
   const renderDepositFlow = () => {
+    // Multi-ticket flow - show progress and current ticket
+    if (depositState.depositFlowState === 'multi-ticket') {
+      const currentTicket = depositState.ticketPayments[depositState.currentTicketIndex];
+      const currentTicketNumber = depositState.currentTicketIndex + 1;
+      const completedCount = depositState.completedTickets.length;
+
+      return (
+        <div className="bg-neutral-950 border border-gray-800 flex flex-col gap-4 sm:gap-5 items-center px-4 sm:px-5 md:px-6 py-4 sm:py-5 w-full">
+          {/* Multi-Ticket Progress */}
+          <div className="w-full bg-[rgba(208,135,0,0.1)] border border-[#d08700] rounded p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-rajdhani font-bold text-sm text-[#d08700]">
+                MULTI-TICKET PURCHASE
+              </div>
+              <div className="font-rajdhani font-bold text-xs text-[#d08700]">
+                {completedCount}/{depositState.ticketQuantity} COMPLETED
+              </div>
+            </div>
+            {/* Progress bar */}
+            <div className="w-full bg-black/30 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-[#d08700] h-full transition-all duration-300"
+                style={{ width: `${(completedCount / depositState.ticketQuantity) * 100}%` }}
+              />
+            </div>
+            <div className="mt-2 font-rajdhani text-xs text-gray-400">
+              Each ticket requires a separate untraceable payment
+            </div>
+          </div>
+
+          {/* Ticket Checklist - Visual Status of All Tickets */}
+          <div className="w-full border border-white/10 rounded p-3 bg-black/20">
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-rajdhani font-bold text-sm text-white">
+                TICKET CHECKLIST
+              </div>
+              <button
+                onClick={() => setShowAllTickets(!showAllTickets)}
+                className="font-rajdhani font-bold text-xs cursor-pointer text-[#d08700] hover:text-[#d08700]/80 transition-colors"
+              >
+                {showAllTickets ? 'HIDE ALL' : 'VIEW ALL CODES'}
+              </button>
+            </div>
+
+            {/* Grid of ticket status indicators - clickable to select ticket */}
+            <div className="grid grid-cols-5 gap-2">
+              {Array.from({ length: depositState.ticketQuantity }).map((_, index) => {
+                const ticket = depositState.ticketPayments[index];
+                const ticketNum = index + 1;
+                const isCompleted = ticket?.status === 'completed';
+                const isActive = index === depositState.currentTicketIndex;
+                const isPending = !ticket || ticket.status === 'pending' || ticket.status === 'waiting-payment';
+                const isConfirming = ticket?.status === 'confirming';
+                const isGeneratingProof = ticket?.status === 'generating-proof';
+
+                return (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      if (ticket && ticket.depositAddress && !isCompleted) {
+                        // Select this ticket to pay for
+                        handleTicketSelection(index);
+                      } else if (ticket && ticket.depositAddress) {
+                        // Toggle expanded view for completed tickets
+                        setExpandedTicketIndex(expandedTicketIndex === index ? null : index);
+                      }
+                    }}
+                    disabled={isCompleted}
+                    className={`relative cursor-pointer aspect-square rounded border-2 flex flex-col items-center justify-center transition-all ${
+                      isCompleted
+                        ? 'border-green-500 bg-green-500/10 cursor-default'
+                        : isActive
+                          ? 'border-[#d08700] bg-[#d08700]/10 animate-pulse cursor-pointer hover:bg-[#d08700]/20'
+                          : isPending
+                            ? 'border-gray-600 bg-gray-800/20 cursor-pointer hover:border-gray-500 hover:bg-gray-800/30'
+                            : isConfirming || isGeneratingProof
+                              ? 'border-yellow-500 bg-yellow-500/10 cursor-default'
+                              : 'border-yellow-500 bg-yellow-500/10 cursor-pointer hover:border-yellow-400'
+                    }`}
+                    title={
+                      isCompleted
+                        ? `Ticket ${ticketNum} completed`
+                        : isActive
+                          ? `Ticket ${ticketNum} - Currently selected`
+                          : isPending
+                            ? `Click to select Ticket ${ticketNum}`
+                            : isConfirming
+                              ? `Ticket ${ticketNum} - Confirming payment`
+                              : isGeneratingProof
+                                ? `Ticket ${ticketNum} - Generating proof`
+                                : `Ticket ${ticketNum} - Click to select`
+                    }
+                  >
+                    <div className="font-rajdhani font-bold text-xs text-white">
+                      {ticketNum}
+                    </div>
+                    <div className="mt-1">
+                      {isCompleted ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      ) : isActive ? (
+                        <Loader2 className="w-4 h-4 text-[#d08700] animate-spin" />
+                      ) : isConfirming || isGeneratingProof ? (
+                        <Loader2 className="w-4 h-4 text-yellow-500 animate-spin" />
+                      ) : isPending ? (
+                        <div className="w-4 h-4 rounded-full border-2 border-gray-500" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Expandable All Tickets View */}
+          {showAllTickets && (
+            <div className="w-full border border-[#d08700]/30 rounded p-3 bg-black/30 max-h-[400px] overflow-y-auto">
+              <div className="font-rajdhani font-bold text-sm text-white mb-3">
+                ALL TICKET ADDRESSES
+              </div>
+              <div className="space-y-3">
+                {depositState.ticketPayments.map((ticket, index) => {
+                  const isExpanded = expandedTicketIndex === index;
+                  const ticketNum = index + 1;
+
+                  return (
+                    <div
+                      key={index}
+                      className={`border rounded p-3 transition-all ${
+                        ticket.status === 'completed'
+                          ? 'border-green-500/50 bg-green-500/5'
+                          : index === depositState.currentTicketIndex
+                            ? 'border-[#d08700] bg-[#d08700]/5'
+                            : 'border-gray-600 bg-gray-800/20'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-rajdhani font-bold text-sm text-white">
+                            Ticket {ticketNum}
+                          </span>
+                          {ticket.status === 'completed' && (
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                          )}
+                          {index === depositState.currentTicketIndex && ticket.status !== 'completed' && (
+                            <span className="bg-[#d08700] text-black text-xs px-2 py-0.5 rounded font-rajdhani font-bold">
+                              ACTIVE
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => setExpandedTicketIndex(isExpanded ? null : index)}
+                          className="text-[#d08700] hover:text-[#d08700]/80 cursor-pointer text-xs font-rajdhani font-bold"
+                        >
+                          {isExpanded ? 'HIDE QR' : 'SHOW QR'}
+                        </button>
+                      </div>
+
+                      {/* Collapsed view - Address only */}
+                      <div className="font-mono text-xs text-gray-400 break-all mb-2">
+                        {ticket.depositAddress}
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">
+                          {ticket.depositAmount} {depositState.selectedToken?.symbol}
+                        </span>
+                        <Button
+                          onClick={() => {
+                            navigator.clipboard.writeText(ticket.depositAddress);
+                            toast.success(`Ticket ${ticketNum} address copied!`);
+                          }}
+                          className="bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 h-auto text-xs font-rajdhani"
+                        >
+                          Copy
+                        </Button>
+                      </div>
+
+                      {/* Expanded view - QR Code */}
+                      {isExpanded && (
+                        <div className="mt-3 flex flex-col items-center gap-2 pt-3 border-t border-white/10">
+                          <div className="bg-white p-2 rounded">
+                            <QRCodeSVG
+                              value={ticket.depositAddress}
+                              size={120}
+                              level="M"
+                            />
+                          </div>
+                          <div className="font-rajdhani text-xs text-[#d08700] font-bold">
+                            Scan to pay for Ticket {ticketNum}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Current Ticket Focus */}
+          <div className="w-full border border-white/20 rounded p-3 bg-black/20">
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-rajdhani font-bold text-base text-white">
+                SELECTED: TICKET {currentTicketNumber}/{depositState.ticketQuantity}
+              </div>
+            </div>
+            {currentTicket?.status === 'completed' ? (
+              <div className="flex items-center gap-2 text-green-500">
+                <CheckCircle2 className="w-5 h-5" />
+                <span className="font-rajdhani text-sm">Payment confirmed & proof generated</span>
+              </div>
+            ) : currentTicket?.status === 'confirming' ? (
+              <div className="flex items-center gap-2 text-[#d08700]">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="font-rajdhani text-sm">Confirming payment...</span>
+              </div>
+            ) : currentTicket?.status === 'generating-proof' ? (
+              <div className="flex items-center gap-2 text-[#d08700]">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="font-rajdhani text-sm">Generating ZK proof...</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-gray-400">
+                <AlertTriangle className="w-5 h-5" />
+                <span className="font-rajdhani text-sm">Ready for payment - Send to address below</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col items-center w-full">
+            <div className="font-rajdhani font-semibold text-lg sm:text-xl text-white text-center w-full mb-1">
+              Send Payment for Ticket {currentTicketNumber}
+            </div>
+            <div className="font-rajdhani font-normal text-sm text-gray-400 text-center w-full">
+              Send exactly {currentTicket?.depositAmount || '0'} {depositState.selectedToken?.symbol || ''} to the address below
+            </div>
+          </div>
+
+          {/* QR Code */}
+          {currentTicket?.depositAddress && (
+            <div className="relative w-full flex justify-center">
+              <div className="border border-white/10 p-1 rounded-lg bg-white">
+                <QRCodeSVG
+                  value={currentTicket.depositAddress}
+                  size={150}
+                  level="M"
+                  className="w-[150px] h-[150px] sm:w-[175px] sm:h-[175px]"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Exact Amount to Deposit */}
+          <div className="w-full space-y-3">
+            <div className="border-2 border-[#d08700] bg-[#d08700]/10 flex flex-col gap-2 px-3 py-3 rounded">
+              <div className="font-rajdhani font-medium text-xs text-[#d08700] uppercase">
+                ⚠️ Exact Amount to Deposit
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="font-rajdhani font-bold text-2xl text-white flex-1">
+                  {currentTicket?.depositAmount || '0'} {depositState.selectedToken?.symbol}
+                </div>
+                <Button
+                  onClick={() => {
+                    if (currentTicket?.depositAmount) {
+                      navigator.clipboard.writeText(currentTicket.depositAmount);
+                      toast.success('Amount copied!');
+                    }
+                  }}
+                  className="bg-[#d08700] hover:bg-[#d08700]/80 text-black px-3 py-1.5 h-auto text-xs font-rajdhani font-bold shrink-0"
+                >
+                  Copy
+                </Button>
+              </div>
+              <div className="font-rajdhani text-xs text-red-400">
+                You MUST send this exact amount. This address is ONLY for Ticket {currentTicketNumber}.
+              </div>
+            </div>
+
+            {/* Deposit Address - Copyable */}
+            <div className="border border-white/20 bg-black/50 flex flex-col gap-2 px-3 py-3 rounded">
+              <div className="font-rajdhani font-medium text-xs text-gray-500 uppercase">
+                Deposit Address for Ticket {currentTicketNumber} ({depositState.selectedToken?.symbol})
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="font-mono text-sm text-[#d08700] break-all flex-1">
+                  {currentTicket?.depositAddress || ''}
+                </div>
+                <Button
+                  onClick={() => {
+                    if (currentTicket?.depositAddress) {
+                      navigator.clipboard.writeText(currentTicket.depositAddress);
+                      toast.success('Address copied!');
+                    }
+                  }}
+                  className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 h-auto text-xs font-rajdhani font-bold shrink-0"
+                >
+                  Copy
+                </Button>
+              </div>
+            </div>
+
+            {/* Critical Warning */}
+            <div className="bg-red-500/10 border border-red-500/30 p-3 rounded">
+              <p className="font-rajdhani font-semibold text-sm text-red-400">⚠️ PRIVACY NOTICE</p>
+              <ul className="list-disc list-inside space-y-1.5 font-rajdhani text-xs text-red-300/70 mt-2">
+                <li><span className="text-white font-bold">UNIQUE ADDRESS:</span> This address is ONLY for Ticket {currentTicketNumber}/{depositState.ticketQuantity}</li>
+                <li><span className="text-white font-bold">DO NOT REUSE:</span> Each ticket gets a new address for privacy</li>
+                <li><span className="text-white font-bold">EXACT AMOUNT:</span> Send exactly {currentTicket?.depositAmount} {depositState.selectedToken?.symbol}</li>
+                <li><span className="text-white font-bold">ONE-TIME USE:</span> This address expires after this payment</li>
+              </ul>
+            </div>
+
+            {/* Action Button */}
+            <Button
+              onClick={() => {
+                if (currentTicket?.depositAddress) {
+                  handleManualStatusCheck();
+                }
+              }}
+              disabled={depositState.isCheckingStatus || currentTicket?.status === 'completed'}
+              className="w-full bg-[#d08700] hover:bg-[#d08700]/90 text-black font-rajdhani font-bold py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {depositState.isCheckingStatus ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Checking...
+                </>
+              ) : currentTicket?.status === 'completed' ? (
+                'Ticket Completed'
+              ) : (
+                `I've Sent Payment for Ticket ${currentTicketNumber} - Check Status`
+              )}
+            </Button>
+
+            <div className="font-rajdhani text-xs font-bold text-gray-500 text-center">
+              {depositState.ticketQuantity > 1 
+                ? 'You can pay for tickets in any order. Click any ticket above to switch.'
+                : 'After confirmation, your ticket proof will be generated automatically'}            </div>
+          </div>
+        </div>
+      );
+    }
+
     // Show QR code with detecting indicator overlay
     if (depositState.depositFlowState === 'detecting' && depositState.depositAddress) {
       return (
@@ -1276,70 +1876,114 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
     }
 
     if (depositState.depositFlowState === 'success') {
-      const ticketInfo = depositState.ticketData;
-      
+      const totalTickets = depositState.completedTickets.length;
+      const totalTokensClaimed = depositState.completedTickets.reduce((sum, t) => {
+        return sum + (parseFloat(t.claimAmount) || 0);
+      }, 0);
+
       return (
         <div className="bg-neutral-950 border border-gray-800 flex flex-col gap-4 items-center justify-center px-4 sm:px-6 py-6 sm:py-8 w-full">
           <div className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center shrink-0">
             <CheckCircle2 className="w-full h-full text-green-500" />
           </div>
-          
+
           <div className="flex flex-col gap-2 items-center w-full max-w-[320px]">
             <div className="font-rajdhani font-semibold text-xl sm:text-2xl text-white uppercase text-center">
-              TICKET GENERATED!
+              {totalTickets > 1 ? `${totalTickets} TICKETS GENERATED!` : 'TICKET GENERATED!'}
             </div>
             <div className="font-rajdhani font-medium text-sm text-gray-400 text-center">
-              Your ZK proof ticket has been created successfully.
+              {totalTickets > 1
+                ? `Your ${totalTickets} ZK proof tickets have been created successfully with separate addresses.`
+                : 'Your ZK proof ticket has been created successfully.'}
             </div>
           </div>
 
-          {/* Ticket Info */}
-          {ticketInfo && (
+          {/* Summary Info for Multi-Ticket */}
+          {totalTickets > 1 && (
             <div className="w-full max-w-[320px] bg-[rgba(208,135,0,0.05)] border border-[#d08700]/30 rounded p-4 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Deposit</span>
-                <span className="text-white font-bold">{depositState.depositAmount} {depositState.selectedToken?.symbol}</span>
+                <span className="text-gray-400">Total Tickets</span>
+                <span className="text-white font-bold">{totalTickets}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-400">ZEC Received</span>
-                <span className="text-white font-bold">{ticketInfo.swapAmountOut || depositState.purchaseInfo?.expectedOut || '---'} ZEC</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Tokens to Claim</span>
+                <span className="text-gray-400">Total Tokens to Claim</span>
                 <span className="text-[#d08700] font-bold">
-                  {ticketInfo.claimAmountFormatted || (ticketInfo.claimAmount && ticketInfo.claimAmount !== '0' 
-                    ? Number(ticketInfo.claimAmount).toLocaleString() 
-                    : '---')} {token.tokenSymbol}
+                  {formatBalance(totalTokensClaimed / Math.pow(10, token.decimals), 4)} {token.tokenSymbol}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Proof Reference</span>
-                <span className="text-white font-mono text-xs">{ticketInfo.proofReference || '---'}</span>
+                <span className="text-gray-400">Unique Addresses Used</span>
+                <span className="text-green-500 font-bold">{totalTickets} ✓</span>
               </div>
             </div>
           )}
 
-          {/* Proof File */}
-          <div className="border border-dashed border-[#d08700] bg-[#d08700]/5 flex gap-2 items-center justify-center px-4 py-3 w-full max-w-[320px] rounded">
-            <svg className="w-5 h-5 text-[#d08700]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <div className="font-mono text-sm text-[#d08700] truncate">
-              {ticketInfo?.proofReference || 'zk_proof'}.zip
+          {/* Single Ticket Info */}
+          {totalTickets === 1 && depositState.completedTickets[0] && (
+            <div className="w-full max-w-[320px] bg-[rgba(208,135,0,0.05)] border border-[#d08700]/30 rounded p-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Tokens to Claim</span>
+                <span className="text-[#d08700] font-bold">
+                  {depositState.completedTickets[0].claimAmountFormatted || '---'} {token.tokenSymbol}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Proof Reference</span>
+                <span className="text-white font-mono text-xs">{depositState.completedTickets[0].proofReference || '---'}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Privacy Confirmation Badge */}
+          <div className="w-full max-w-[320px] bg-green-500/10 border border-green-500/30 rounded p-3">
+            <div className="flex items-center gap-2 text-green-400">
+              <CheckCircle2 className="w-5 h-5" />
+              <div className="flex-1">
+                <div className="font-rajdhani font-bold text-sm">PRIVACY PROTECTED</div>
+                <div className="font-rajdhani text-xs text-gray-400 mt-1">
+                  {totalTickets > 1
+                    ? `${totalTickets} separate untraceable payment addresses were used`
+                    : 'Untraceable payment completed'}
+                </div>
+              </div>
             </div>
           </div>
 
-          <Button
-            onClick={downloadTicketZip}
-            className="w-full max-w-[320px] bg-[#d08700] hover:bg-[#d08700]/90 text-black font-rajdhani font-bold py-3 text-base flex items-center justify-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Download Proof Ticket
-          </Button>
+          {/* Download Buttons - One for each ticket if multiple */}
+          {totalTickets > 1 ? (
+            <div className="w-full max-w-[320px] space-y-2">
+              <div className="font-rajdhani font-bold text-sm text-white text-center mb-2">
+                Download Each Ticket Separately
+              </div>
+              {depositState.completedTickets.map((ticket, index) => (
+                <Button
+                  key={ticket.proofReference}
+                  onClick={() => {
+                    // Download individual ticket proof
+                    if (teeResult) {
+                      downloadProofFromTEE(teeResult);
+                    }
+                  }}
+                  className="w-full bg-[#d08700] hover:bg-[#d08700]/90 text-black font-rajdhani font-bold py-2.5 text-sm flex items-center justify-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Ticket {index + 1} - {ticket.proofReference.slice(0, 8)}...
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <Button
+              onClick={downloadTicketZip}
+              className="w-full max-w-[320px] bg-[#d08700] hover:bg-[#d08700]/90 text-black font-rajdhani font-bold py-3 text-base flex items-center justify-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Download Proof Ticket
+            </Button>
+          )}
 
           <div className="text-center max-w-[320px]">
             <p className="font-rajdhani text-xs text-gray-500">
-              ⚠️ Keep your proof file safe! You'll need it to claim tokens when the sale ends.
+              ⚠️ Keep your proof file{totalTickets > 1 ? 's' : ''} safe! You'll need {totalTickets > 1 ? 'them' : 'it'} to claim tokens when the sale ends.
             </p>
           </div>
 
@@ -1352,7 +1996,12 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
                 depositAddress: null,
                 ticketData: null,
                 swapStatus: null,
+                ticketQuantity: 1,
+                ticketPayments: [],
+                currentTicketIndex: 0,
+                completedTickets: [],
               }));
+              setTeeResult(null);
             }}
             variant="outline"
             className="w-full max-w-[320px] border-gray-600 hover:bg-gray-800 h-auto py-3 font-rajdhani font-medium text-sm text-black"
@@ -1648,7 +2297,6 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
                 </div>
               )}
             </div>
-
             {/* Token Selector */}
             <div className="relative flex-1">
               <button
@@ -1692,11 +2340,12 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
                       <button
                         key={tkn.assetId}
                         onClick={() => {
-                          // Calculate ticket price in selected token
+                          // Calculate total ticket price in selected token (price * quantity)
                           const ticketPriceUsd = Number(token.pricePerTicket) / 1_000_000;
-                          const ticketPriceInToken = ticketPriceUsd / tkn.price;
-                          const formattedAmount = ticketPriceInToken.toFixed(8);
-                          
+                          const totalPriceUsd = ticketPriceUsd * depositState.ticketQuantity;
+                          const totalPriceInToken = totalPriceUsd / tkn.price;
+                          const formattedAmount = totalPriceInToken.toFixed(8);
+
                           setDepositState((prev) => ({
                             ...prev,
                             selectedToken: tkn,
@@ -1704,7 +2353,7 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
                             depositAmount: formattedAmount,
                             purchaseInfo: null,
                           }));
-                          
+
                           // Trigger quote calculation
                           handleDepositAmountChange(formattedAmount);
                         }}
@@ -1731,13 +2380,64 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
             </div>
           </div>
         </div>
+        <div className="flex flex-col w-full gap-3">
+          <div className="font-rajdhani font-medium text-xs sm:text-sm md:text-[15px] text-[rgba(255,255,255,0.65)] uppercase">
+            Number of Tickets
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => handleQuantityChange(depositState.ticketQuantity - 1)}
+              disabled={depositState.ticketQuantity <= 1}
+              className="bg-[#131313] border border-[#393939] hover:bg-[#1a1a1a] disabled:opacity-50 disabled:cursor-not-allowed w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-xl transition-colors"
+            >
+              -
+            </button>
+            <div className="flex-1 bg-[#131313] border border-[#393939] rounded-lg px-4 py-1 flex items-center justify-center">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={depositState.ticketQuantity === 0 ? '' : depositState.ticketQuantity}
+                onChange={(e) => {
+                  const value = e.target.value;
 
+                  // Allow empty string (for deleting)
+                  if (value === '') {
+                    setDepositState((prev) => ({ ...prev, ticketQuantity: 0 }));
+                    return;
+                  }
+
+                  // Only allow positive integers (no decimals, no negative, no leading zeros)
+                  if (/^[1-9]\d*$/.test(value)) {
+                    const val = parseInt(value);
+                    if (!isNaN(val)) {
+                      handleQuantityChange(val);
+                    }
+                  }
+                }}
+                onBlur={(e) => {
+                  // Ensure value is at least 1 on blur
+                  if (e.target.value === '' || depositState.ticketQuantity < 1) {
+                    setDepositState((prev) => ({ ...prev, ticketQuantity: 1 }));
+                  }
+                }}
+                className="w-full bg-transparent border-none focus:ring-0 focus:outline-none text-center font-rajdhani font-bold text-2xl text-white"
+              />
+            </div>
+            <button
+              onClick={() => handleQuantityChange(depositState.ticketQuantity + 1)}
+              disabled={depositState.availability ? (depositState.ticketQuantity >= (Number(token.totalTickets) - (depositState.availability.ticketsCreated || 0))) : false}
+              className="bg-[#131313] border border-[#393939] hover:bg-[#1a1a1a] disabled:opacity-50 disabled:cursor-not-allowed w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-xl transition-colors"
+            >
+              +
+            </button>
+          </div>
+        </div>
         <div className="flex flex-col w-full">
           <div className="border border-white/12 h-[120px] sm:h-[135px] overflow-hidden relative rounded-t-xl bg-black/20">
             <div className="absolute inset-0 flex items-center justify-between px-3 sm:px-4 gap-2 sm:gap-4">
               <div className="flex flex-col gap-1.5 sm:gap-2 flex-1 min-w-0">
                 <div className="font-rajdhani font-medium text-xs sm:text-sm md:text-[15px] text-[rgba(255,255,255,0.65)] uppercase">
-                  TICKET PRICE
+                  {depositState.ticketQuantity > 1 ? `TOTAL PRICE (${depositState.ticketQuantity} TICKETS)` : 'TICKET PRICE'}
                 </div>
                 <input
                   type="text"
@@ -1748,7 +2448,10 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
                 />
                 <div className="h-[16px] sm:h-[18px] bg-[#d08700]/10 rounded-full px-2 flex items-center w-fit">
                   <span className="font-rajdhani font-medium text-[11px] sm:text-xs md:text-[13px] text-[#d08700]">
-                    1 Ticket = ${(Number(token.pricePerTicket) / 1_000_000).toFixed(2)} USD
+                    {depositState.ticketQuantity > 1
+                      ? `${depositState.ticketQuantity} × $${(Number(token.pricePerTicket) / 1_000_000).toFixed(2)} = $${((Number(token.pricePerTicket) / 1_000_000) * depositState.ticketQuantity).toFixed(2)} USD`
+                      : `1 Ticket = $${(Number(token.pricePerTicket) / 1_000_000).toFixed(2)} USD`
+                    }
                   </span>
                 </div>
               </div>
@@ -1784,12 +2487,12 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
             <div className="absolute inset-0 flex items-center justify-between px-3 sm:px-4 gap-2 sm:gap-4">
               <div className="flex flex-col gap-1.5 sm:gap-2 flex-1 min-w-0">
                 <div className="font-rajdhani font-medium text-xs sm:text-sm md:text-[15px] text-[rgba(255,255,255,0.65)] uppercase">
-                  YOU'LL RECEIVE
+                  {depositState.ticketQuantity > 1 ? `TOTAL TOKENS (${depositState.ticketQuantity} TICKETS)` : "YOU'LL RECEIVE"}
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <input
                     type="text"
-                    value={formatBalance(Number(token.tokensPerProof) / Math.pow(10, token.decimals), 4)}
+                    value={formatBalance((Number(token.tokensPerProof) / Math.pow(10, token.decimals)) * depositState.ticketQuantity, 4)}
                     className="w-full text-2xl sm:text-3xl md:text-[36px] font-rajdhani font-medium bg-transparent border-none focus:ring-0 focus:outline-none text-white placeholder:text-[rgba(255,255,255,0.38)] h-auto p-0 cursor-default"
                     placeholder="0"
                     readOnly
@@ -1828,14 +2531,26 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
             </div>
             <div className="flex items-center justify-between gap-2">
               <div className="font-rajdhani font-normal text-xs sm:text-sm text-[#79767d]">
-                Ticket Price
+                {depositState.ticketQuantity > 1 ? `Total Price (${depositState.ticketQuantity} tickets)` : 'Ticket Price'}
               </div>
               <div className="font-rajdhani font-semibold text-xs sm:text-sm text-white">
                 {depositState.selectedToken
                   ? `${depositState.depositAmount} ${depositState.selectedToken.symbol}`
-                  : `$${(Number(token.pricePerTicket) / 1_000_000).toFixed(2)} USD`}
+                  : depositState.ticketQuantity > 1
+                    ? `$${((Number(token.pricePerTicket) / 1_000_000) * depositState.ticketQuantity).toFixed(2)} USD`
+                    : `$${(Number(token.pricePerTicket) / 1_000_000).toFixed(2)} USD`}
               </div>
             </div>
+            {depositState.ticketQuantity > 1 && (
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-rajdhani font-normal text-xs sm:text-sm text-[#79767d]">
+                  Total Tokens
+                </div>
+                <div className="font-rajdhani font-semibold text-xs sm:text-sm text-[#d08700]">
+                  {formatBalance((Number(token.tokensPerProof) / Math.pow(10, token.decimals)) * depositState.ticketQuantity, 4)} {getTokenSymbol() as string}
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex items-center justify-between gap-2">
             <div className="font-rajdhani font-bold text-xs sm:text-sm text-[#79767d] uppercase">
@@ -1894,7 +2609,9 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
           ) : !depositState.selectedToken ? (
             <span className="text-xs sm:text-sm md:text-base">Select Payment Token</span>
           ) : (
-            <span className="text-xs sm:text-sm md:text-base">GET TICKET</span>
+            <span className="text-xs sm:text-sm md:text-base">
+              {depositState.ticketQuantity > 1 ? `GET ${depositState.ticketQuantity} TICKETS` : 'GET TICKET'}
+            </span>
           )}
         </Button>
 
