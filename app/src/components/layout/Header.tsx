@@ -113,14 +113,6 @@ export default function Header() {
             >
               MY TICKETS
             </Link>
-            <Link
-              href="/bridge"
-              className={`font-rajdhani font-medium text-sm text-gray-400 hover:text-white transition-colors leading-[20px] uppercase pb-0.5 ${
-                pathname === '/bridge' ? 'border-b border-[#d08700] text-white' : ''
-              }`}
-            >
-              BRIDGE
-            </Link>
           </nav>
 
           <div className="flex items-center gap-4 md:gap-6">
@@ -239,15 +231,6 @@ export default function Header() {
                 onClick={() => setSidebarOpen(false)}
               >
                 MY TICKETS
-              </Link>
-              <Link
-                href="/bridge"
-                className={`font-rajdhani font-medium text-lg text-gray-400 hover:text-white transition-colors uppercase pb-1 ${
-                  pathname === '/bridge' ? 'border-b-2 border-[#d08700] text-white' : ''
-                }`}
-                onClick={() => setSidebarOpen(false)}
-              >
-                BRIDGE
               </Link>
             </nav>
             <div className="flex flex-col gap-4 border-t border-[rgba(208,135,0,0.42)] pt-4">

@@ -1,12 +1,11 @@
 /**
- * DeBridge Cross-Chain Bridge Library
+ * DeBridge Cross-Chain Bridge Library (dePort)
  * 
  * This library provides functions to bridge tokens from Solana to other chains
- * using the DeBridge DLN (Liquidity Network) API.
+ * using the DeBridge dePort API (lock-and-mint approach).
  * 
- * Documentation: https://docs.debridge.finance/
- * API Base: Configured via NEXT_PUBLIC_DEBRIDGE_DLN_API_BASE
- * Stats API: Configured via NEXT_PUBLIC_DEBRIDGE_STATS_API_BASE
+ * Documentation: https://docs.debridge.com/dePort/getting-started
+ * Widget: https://app.debridge.finance/deport
  */
 
 import { Connection, VersionedTransaction, PublicKey } from '@solana/web3.js';
@@ -18,7 +17,6 @@ import { DEBRIDGE_DLN_API_BASE, DEBRIDGE_STATS_API_BASE } from '@/configs/env.co
 
 /**
  * DeBridge Chain IDs
- * Full list: https://docs.debridge.finance/dln-details/overview/fees-supported-chains
  */
 export enum ChainId {
   // EVM Chains
@@ -34,7 +32,6 @@ export enum ChainId {
   
   // Non-EVM Chains
   SOLANA = 7565164,
-  // Note: NEAR support might use a different integration pattern
 }
 
 /**
@@ -56,57 +53,29 @@ export const SUPPORTED_CHAINS = {
 export type SupportedChainKey = keyof typeof SUPPORTED_CHAINS;
 
 /**
- * Order estimation returned by DeBridge API
+ * dePort transaction creation response
  */
-export interface BridgeEstimation {
-  srcChainTokenIn: {
-    address: string;
-    name: string;
-    symbol: string;
-    decimals: number;
-    amount: string;
-    approximateOperatingExpense: string;
-    mutatedWithOperatingExpense: boolean;
+export interface DePortTransactionResponse {
+  tx: {
+    data: string; // hex-encoded transaction
+    meta?: {
+      srcChainTokenIn?: {
+        address: string;
+        amount: string;
+        decimals: number;
+        symbol: string;
+        name: string;
+      };
+      dstChainTokenOut?: {
+        address: string;
+        amount: string;
+        decimals: number;
+        symbol: string;
+        name: string;
+      };
+    };
   };
-  srcChainTokenOut: {
-    address: string;
-    name: string;
-    symbol: string;
-    decimals: number;
-    amount: string;
-    maxRefundAmount: string;
-  };
-  dstChainTokenOut: {
-    address: string;
-    name: string;
-    symbol: string;
-    decimals: number;
-    amount: string;
-    recommendedAmount: string;
-    maxTheoreticalAmount: string;
-  };
-  recommendedSlippage: number;
-  costsDetails: string[];
-}
-
-/**
- * Transaction data for Solana
- */
-export interface SolanaBridgeTransaction {
-  data: string; // hex-encoded VersionedTransaction
-}
-
-/**
- * Order creation response
- */
-export interface BridgeOrderResponse {
-  estimation: BridgeEstimation;
-  tx?: SolanaBridgeTransaction;
   orderId?: string;
-  prependedOperatingExpenseCost?: string;
-  order?: {
-    approximateFulfillmentDelay: number;
-  };
 }
 
 /**
@@ -153,34 +122,25 @@ export interface OrderInfo {
 }
 
 /**
- * Bridge quote parameters
+ * Bridge parameters for dePort
  */
-export interface BridgeQuoteParams {
+export interface DePortBridgeParams {
   srcChainId: ChainId;
   srcChainTokenIn: string; // Token address on source chain
   srcChainTokenInAmount: string; // Amount with decimals
   dstChainId: ChainId;
-  dstChainTokenOut: string; // Token address on destination chain
-  dstChainTokenOutAmount?: 'auto' | string; // 'auto' recommended
-  affiliateFeePercent?: number; // Optional fee (e.g., 0.1 for 0.1%)
-  affiliateFeeRecipient?: string; // Your fee recipient address
-}
-
-/**
- * Bridge order creation parameters
- */
-export interface BridgeOrderParams extends BridgeQuoteParams {
   dstChainTokenOutRecipient: string; // Recipient address on destination chain
   srcChainOrderAuthorityAddress: string; // Authority on source chain (user wallet)
-  dstChainOrderAuthorityAddress: string; // Authority on dest chain (user wallet)
-  prependOperatingExpenses?: boolean; // Add operating expenses to amount
+  dstChainOrderAuthorityAddress?: string; // Optional: Authority on dest chain (defaults to recipient)
+  affiliateFeePercent?: number; // Optional fee (e.g., 0.1 for 0.1%)
+  affiliateFeeRecipient?: string; // Your fee recipient address
 }
 
 // ============================================================================
 // API CONFIGURATION
 // ============================================================================
 
-const DLN_API_BASE = DEBRIDGE_DLN_API_BASE;
+const DEPORT_API_BASE = DEBRIDGE_DLN_API_BASE;
 const STATS_API_BASE = DEBRIDGE_STATS_API_BASE;
 
 // ============================================================================
@@ -188,76 +148,37 @@ const STATS_API_BASE = DEBRIDGE_STATS_API_BASE;
 // ============================================================================
 
 /**
- * Get a quote/estimation for bridging without wallet addresses
- * Use this before wallet is connected to show estimated amounts
+ * Create a dePort bridge transaction
  * 
- * @param params - Quote parameters
- * @returns Promise with estimation data
+ * dePort uses a lock-and-mint approach:
+ * 1. Token is locked on source chain (Solana)
+ * 2. Synthetic wrapped token (deAsset) is minted on destination chain
+ * 3. No liquidity required - works for any arbitrary token
+ * 
+ * IMPORTANT: Sign and submit the transaction within 30 seconds
+ * 
+ * @param params - Bridge parameters
+ * @returns Promise with transaction data
  */
-export async function getBridgeQuote(
-  params: BridgeQuoteParams
-): Promise<BridgeEstimation> {
+export async function createDePortBridge(
+  params: DePortBridgeParams
+): Promise<DePortTransactionResponse> {
   const queryParams = new URLSearchParams({
     srcChainId: params.srcChainId.toString(),
     srcChainTokenIn: params.srcChainTokenIn,
     srcChainTokenInAmount: params.srcChainTokenInAmount,
     dstChainId: params.dstChainId.toString(),
-    dstChainTokenOut: params.dstChainTokenOut,
-    dstChainTokenOutAmount: params.dstChainTokenOutAmount || 'auto',
-  });
-
-  if (params.affiliateFeePercent) {
-    queryParams.append('affiliateFeePercent', params.affiliateFeePercent.toString());
-  }
-  if (params.affiliateFeeRecipient) {
-    queryParams.append('affiliateFeeRecipient', params.affiliateFeeRecipient);
-  }
-
-  const url = `${DLN_API_BASE}/dln/order/create-tx?${queryParams.toString()}`;
-  
-  const response = await fetch(url);
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`DeBridge API Error: ${response.statusText}. ${errorText}`);
-  }
-
-  const data: BridgeOrderResponse = await response.json();
-  
-  if (!data.estimation) {
-    throw new Error('No estimation returned from DeBridge API');
-  }
-
-  return data.estimation;
-}
-
-/**
- * Create a bridge order transaction
- * This returns the transaction data that needs to be signed
- * 
- * IMPORTANT: Sign and submit the transaction within 30 seconds for >99.9% fill probability
- * 
- * @param params - Order creation parameters
- * @returns Promise with order response including transaction data
- */
-export async function createBridgeOrder(
-  params: BridgeOrderParams
-): Promise<BridgeOrderResponse> {
-  const queryParams = new URLSearchParams({
-    srcChainId: params.srcChainId.toString(),
-    srcChainTokenIn: params.srcChainTokenIn,
-    srcChainTokenInAmount: params.srcChainTokenInAmount,
-    dstChainId: params.dstChainId.toString(),
-    dstChainTokenOut: params.dstChainTokenOut,
-    dstChainTokenOutAmount: params.dstChainTokenOutAmount || 'auto',
     dstChainTokenOutRecipient: params.dstChainTokenOutRecipient,
     srcChainOrderAuthorityAddress: params.srcChainOrderAuthorityAddress,
-    dstChainOrderAuthorityAddress: params.dstChainOrderAuthorityAddress,
+    // For dePort, the destination token is automatically the wrapped version
+    // so we don't specify dstChainTokenOut - it will be created automatically
   });
 
-  if (params.prependOperatingExpenses !== undefined) {
-    queryParams.append('prependOperatingExpenses', params.prependOperatingExpenses.toString());
+  // Add optional destination authority (defaults to recipient if not provided)
+  if (params.dstChainOrderAuthorityAddress) {
+    queryParams.append('dstChainOrderAuthorityAddress', params.dstChainOrderAuthorityAddress);
   }
+
   if (params.affiliateFeePercent) {
     queryParams.append('affiliateFeePercent', params.affiliateFeePercent.toString());
   }
@@ -265,33 +186,38 @@ export async function createBridgeOrder(
     queryParams.append('affiliateFeeRecipient', params.affiliateFeeRecipient);
   }
 
-  const url = `${DLN_API_BASE}/dln/order/create-tx?${queryParams.toString()}`;
+  const url = `${DEPORT_API_BASE}/deport/order/create-tx?${queryParams.toString()}`;
+  
+  console.log('dePort API request:', url);
   
   const response = await fetch(url);
   
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`DeBridge API Error: ${response.statusText}. ${errorText}`);
+    console.error('dePort API error:', errorText);
+    throw new Error(`DeBridge dePort API Error: ${response.statusText}. ${errorText}`);
   }
 
-  const data: BridgeOrderResponse = await response.json();
+  const data: DePortTransactionResponse = await response.json();
   
   if (!data.tx) {
-    throw new Error('No transaction data returned from DeBridge API');
+    throw new Error('No transaction data returned from dePort API');
   }
+
+  console.log('dePort transaction created:', data);
 
   return data;
 }
 
 /**
- * Execute bridge transaction on Solana
+ * Execute dePort bridge transaction on Solana
  * 
  * @param connection - Solana connection
- * @param transactionData - Hex-encoded transaction from createBridgeOrder
+ * @param transactionData - Hex-encoded transaction from createDePortBridge
  * @param signTransaction - Wallet's sign transaction function
  * @returns Promise with transaction signature
  */
-export async function executeSolanaBridge(
+export async function executeSolanaDePortBridge(
   connection: Connection,
   transactionData: string,
   signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>
@@ -317,7 +243,7 @@ export async function executeSolanaBridge(
     
     return signature;
   } catch (error) {
-    throw new Error(`Failed to execute Solana bridge transaction: ${error}`);
+    throw new Error(`Failed to execute dePort bridge transaction: ${error}`);
   }
 }
 
@@ -515,20 +441,16 @@ export function parseBridgeAmount(amount: string | number, decimals: number): st
 }
 
 /**
- * Estimate bridge time
+ * Estimate bridge time for dePort
+ * dePort typically completes in 2-5 minutes
  * 
  * @param srcChainId - Source chain ID
  * @param dstChainId - Destination chain ID
  * @returns Estimated time in seconds
  */
 export function estimateBridgeTime(srcChainId: ChainId, dstChainId: ChainId): number {
-  // Solana bridges are typically very fast (1-3 seconds)
-  if (srcChainId === ChainId.SOLANA) {
-    return 2;
-  }
-  
-  // EVM to EVM bridges take longer
-  return 60;
+  // dePort is typically 2-5 minutes
+  return 180; // 3 minutes average
 }
 
 /**
@@ -552,54 +474,52 @@ export function isValidAddress(address: string, chainId: ChainId): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
+/**
+ * Get the wrapped token symbol for display
+ * dePort automatically creates wrapped tokens (deAssets)
+ * 
+ * @param tokenSymbol - Original token symbol
+ * @returns Wrapped token symbol (e.g., "deCAT")
+ */
+export function getWrappedTokenSymbol(tokenSymbol: string): string {
+  return `de${tokenSymbol}`;
+}
+
 // ============================================================================
 // USAGE EXAMPLE (commented out)
 // ============================================================================
 
 /*
-// Example: Bridge USDC from Solana to Base
+// Example: Bridge CAT token from Solana to Base
 
 import { Connection, clusterApiUrl } from '@solana/web3.js';
 
 async function bridgeExample() {
   const connection = new Connection(clusterApiUrl('mainnet-beta'));
   
-  // 1. Get quote first (before wallet connection)
-  const quote = await getBridgeQuote({
+  // 1. Create dePort bridge order
+  const order = await createDePortBridge({
     srcChainId: ChainId.SOLANA,
-    srcChainTokenIn: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC on Solana
-    srcChainTokenInAmount: parseBridgeAmount('100', 6), // 100 USDC
+    srcChainTokenIn: 'D6M7cYVuRDci76MoLa1bgdh6sTzGPw9xYrttbuzvfFhH', // CAT token
+    srcChainTokenInAmount: parseBridgeAmount('100', 9), // 100 CAT
     dstChainId: ChainId.BASE,
-    dstChainTokenOut: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
-    dstChainTokenOutAmount: 'auto',
-  });
-  
-  console.log('You will receive approximately:', 
-    formatBridgeAmount(quote.dstChainTokenOut.amount, 6), 'USDC on Base');
-  
-  // 2. Create order (after wallet connection)
-  const order = await createBridgeOrder({
-    srcChainId: ChainId.SOLANA,
-    srcChainTokenIn: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-    srcChainTokenInAmount: parseBridgeAmount('100', 6),
-    dstChainId: ChainId.BASE,
-    dstChainTokenOut: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-    dstChainTokenOutAmount: 'auto',
     dstChainTokenOutRecipient: '0xYourBaseAddress...',
     srcChainOrderAuthorityAddress: 'YourSolanaAddress...',
-    dstChainOrderAuthorityAddress: '0xYourBaseAddress...',
+    dstChainOrderAuthorityAddress: '0xYourBaseAddress...', // Optional
   });
   
-  // 3. Execute transaction (sign within 30 seconds!)
-  const signature = await executeSolanaBridge(
+  console.log('You will receive deCAT (wrapped CAT) on Base');
+  
+  // 2. Execute transaction (sign within 30 seconds!)
+  const signature = await executeSolanaDePortBridge(
     connection,
-    order.tx!.data,
+    order.tx.data,
     wallet.signTransaction
   );
   
   console.log('Bridge transaction submitted:', signature);
   
-  // 4. Track order status
+  // 3. Track order status
   const orderIds = await getOrderIdFromTx(signature);
   const orderId = orderIds[0];
   
@@ -609,9 +529,9 @@ async function bridgeExample() {
     console.log('Order status:', status.status);
     
     if (isOrderComplete(status.status)) {
-      console.log('Bridge complete!');
+      console.log('Bridge complete! You received deCAT on Base');
     } else {
-      setTimeout(checkStatus, 5000); // Check every 5 seconds
+      setTimeout(checkStatus, 10000); // Check every 10 seconds
     }
   };
   

@@ -3,21 +3,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useConnection } from '@solana/wallet-adapter-react';
-import { PublicKey, VersionedTransaction, Connection } from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
 import { 
   ChainId, 
   SUPPORTED_CHAINS, 
   getSupportedChains,
-  getBridgeQuote,
-  createBridgeOrder,
-  executeSolanaBridge,
+  createDePortBridge,
+  executeSolanaDePortBridge,
   getUserOrders,
   getOrderIdFromTx,
   formatBridgeAmount,
   parseBridgeAmount,
   estimateBridgeTime,
   isValidAddress,
-  type BridgeEstimation,
+  getWrappedTokenSymbol,
   type OrderInfo,
   type SupportedChainKey,
   OrderStatus,
@@ -30,24 +29,21 @@ import {
   TableRow, 
   TableCell 
 } from '@/components/ui/table';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { getChainIcon, getTokenIcon, capitalizeAll } from '@/lib/tokenIcons';
+import { getChainIcon, getTokenIcon } from '@/lib/tokenIcons';
 import { toast } from 'sonner';
 import { 
   Loader2, 
-  ArrowUpDown, 
-  RefreshCw, 
   ExternalLink,
   FileX,
   ChevronDown,
-  Search
+  Search,
+  Info
 } from 'lucide-react';
 import { getRpcSOLEndpoint, getAllTokens, type TokenInfo } from '@/lib/sol';
+import { useCryptoPrices } from '@/hooks/useCryptoPrices';
 
 /**
  * Maps chain keys to icon names used in tokenIcons.ts
- * This ensures correct icon lookup for each chain
  */
 const getChainIconName = (chainKey: SupportedChainKey): string => {
   const iconMap: Record<SupportedChainKey, string> = {
@@ -68,13 +64,13 @@ const getChainIconName = (chainKey: SupportedChainKey): string => {
 export default function BridgePage() {
   const { publicKey, connected, signTransaction } = useWallet();
   const { connection } = useConnection();
+  const { prices } = useCryptoPrices();
   
   // Bridge form state - Source is always Solana
   const fromChain = 'solana'; // Fixed source chain
   const [toChain, setToChain] = useState<SupportedChainKey>('base');
   const [selectedToken, setSelectedToken] = useState<TokenInfo | null>(null);
   const [fromAmount, setFromAmount] = useState('');
-  const [toAmount, setToAmount] = useState('');
   const [destinationAddress, setDestinationAddress] = useState('');
   
   // Token management
@@ -85,11 +81,6 @@ export default function BridgePage() {
   // Dropdown states
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [showToChainDropdown, setShowToChainDropdown] = useState(false);
-  
-  // Quote state
-  const [quote, setQuote] = useState<BridgeEstimation | null>(null);
-  const [loadingQuote, setLoadingQuote] = useState(false);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
   
   // Bridge execution state
   const [bridging, setBridging] = useState(false);
@@ -163,74 +154,6 @@ export default function BridgePage() {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  // Get quote when amount, token, or destination changes
-  const fetchQuote = useCallback(async () => {
-    if (!fromAmount || parseFloat(fromAmount) <= 0 || !selectedToken || !destinationAddress) {
-      setQuote(null);
-      return;
-    }
-
-    // Validate destination address
-    const toChainId = SUPPORTED_CHAINS[toChain].id;
-    if (!isValidAddress(destinationAddress, toChainId)) {
-      setQuoteError('Invalid destination address');
-      setQuote(null);
-      return;
-    }
-
-    setLoadingQuote(true);
-    setQuoteError(null);
-
-    try {
-      const fromChainId = ChainId.SOLANA; // Always from Solana
-      const toChainId = SUPPORTED_CHAINS[toChain].id;
-      
-      // Use selected token's mint address
-      const fromTokenAddress = selectedToken.mint;
-      
-      // Destination token address (would need to be mapped properly in production)
-      // For now using zero address for native tokens
-      const toTokenAddress = '0x0000000000000000000000000000000000000000';
-      
-      // Parse amount using token's decimals
-      const amountParsed = parseBridgeAmount(fromAmount, selectedToken.decimals);
-
-      const estimation = await getBridgeQuote({
-        srcChainId: fromChainId,
-        srcChainTokenIn: fromTokenAddress,
-        srcChainTokenInAmount: amountParsed,
-        dstChainId: toChainId,
-        dstChainTokenOut: toTokenAddress,
-        dstChainTokenOutAmount: 'auto',
-      });
-
-      setQuote(estimation);
-      
-      // Update to amount (destination tokens typically use 18 decimals for EVM)
-      const toDecimals = 18;
-      const receivedAmount = formatBridgeAmount(estimation.dstChainTokenOut.amount, toDecimals);
-      setToAmount(receivedAmount.toFixed(6));
-    } catch (error) {
-      console.error('Error fetching quote:', error);
-      setQuoteError(error instanceof Error ? error.message : 'Failed to get bridge quote');
-      setQuote(null);
-      toast.error('Failed to get bridge quote');
-    } finally {
-      setLoadingQuote(false);
-    }
-  }, [fromAmount, selectedToken, toChain, destinationAddress]);
-
-  // Debounced quote fetching
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (fromAmount && selectedToken && destinationAddress) {
-        fetchQuote();
-      }
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [fromAmount, selectedToken, toChain, destinationAddress, fetchQuote]);
-
   // Handle bridge execution
   const handleBridge = useCallback(async () => {
     if (!publicKey || !connected || !signTransaction) {
@@ -259,11 +182,6 @@ export default function BridgePage() {
       return;
     }
 
-    if (!quote) {
-      toast.error('Please wait for quote to load');
-      return;
-    }
-
     setBridging(true);
 
     try {
@@ -273,18 +191,21 @@ export default function BridgePage() {
       // Use selected token's mint address
       const fromTokenAddress = selectedToken.mint;
       
-      // Destination token address (would need proper mapping in production)
-      const toTokenAddress = '0x0000000000000000000000000000000000000000';
-      
       const amountParsed = parseBridgeAmount(fromAmount, selectedToken.decimals);
 
-      const order = await createBridgeOrder({
+      console.log('Creating dePort bridge:', {
+        fromChainId,
+        fromTokenAddress,
+        amountParsed,
+        toChainId,
+        destinationAddress,
+      });
+
+      const order = await createDePortBridge({
         srcChainId: fromChainId,
         srcChainTokenIn: fromTokenAddress,
         srcChainTokenInAmount: amountParsed,
         dstChainId: toChainId,
-        dstChainTokenOut: toTokenAddress,
-        dstChainTokenOutAmount: 'auto',
         dstChainTokenOutRecipient: destinationAddress,
         srcChainOrderAuthorityAddress: publicKey.toBase58(),
         dstChainOrderAuthorityAddress: destinationAddress,
@@ -296,33 +217,39 @@ export default function BridgePage() {
 
       // Execute bridge
       const solConnection = connection || new Connection(getRpcSOLEndpoint(), 'confirmed');
-      const signature = await executeSolanaBridge(
+      const signature = await executeSolanaDePortBridge(
         solConnection,
         order.tx.data,
         signTransaction
       );
 
-      toast.success('Bridge transaction submitted!');
+      const wrappedSymbol = getWrappedTokenSymbol(selectedToken.symbol);
+      toast.success(`Bridge transaction submitted! You will receive ${wrappedSymbol} on ${SUPPORTED_CHAINS[toChain].name}`);
       
       // Get order ID
-      const orderIds = await getOrderIdFromTx(signature);
+      try {
+        const orderIds = await getOrderIdFromTx(signature);
+        if (orderIds.length > 0) {
+          toast.success(`Order ID: ${orderIds[0]?.slice(0, 8)}...`);
+        }
+      } catch (error) {
+        // Order ID fetch failed, but bridge was successful
+        console.error('Failed to get order ID:', error);
+      }
       
       // Reset form
       setFromAmount('');
-      setToAmount('');
       
       // Refresh tokens and orders
       await fetchSolanaTokens();
       await fetchOrders();
-      
-      toast.success(`Bridge initiated! Order ID: ${orderIds[0]?.slice(0, 8)}...`);
     } catch (error) {
       console.error('Bridge error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to execute bridge');
     } finally {
       setBridging(false);
     }
-  }, [publicKey, connected, signTransaction, fromAmount, selectedToken, toChain, destinationAddress, quote, connection, fetchOrders, fetchSolanaTokens]);
+  }, [publicKey, connected, signTransaction, fromAmount, selectedToken, toChain, destinationAddress, connection, fetchOrders, fetchSolanaTokens]);
 
   // Get all supported chains and filter to EVM only
   const supportedChains = getSupportedChains();
@@ -386,7 +313,23 @@ export default function BridgePage() {
     return `https://etherscan.io/tx/${txHash}`;
   };
 
-  const estimatedTime = quote ? estimateBridgeTime(ChainId.SOLANA, SUPPORTED_CHAINS[toChain].id) : 0;
+  const estimatedTime = estimateBridgeTime(ChainId.SOLANA, SUPPORTED_CHAINS[toChain].id);
+  const wrappedTokenSymbol = selectedToken ? getWrappedTokenSymbol(selectedToken.symbol) : '';
+
+  // Calculate USD value
+  const calculateUsdValue = () => {
+    if (!fromAmount || !selectedToken || !prices.solana) return '--';
+    const amountNum = parseFloat(fromAmount);
+    if (isNaN(amountNum) || amountNum <= 0) return '--';
+    
+    // For SOL, use SOL price directly
+    // For other tokens, we'd need their price - for now show SOL equivalent
+    const usdValue = selectedToken.symbol === 'SOL' 
+      ? amountNum * (prices.solana || 0)
+      : amountNum * (prices.solana || 0) * 0.1; // Placeholder for other tokens
+    
+    return usdValue > 0 ? usdValue.toFixed(2) : '--';
+  };
 
   return (
     <div className="min-h-screen bg-black text-white p-4 sm:p-6 md:p-8">
@@ -508,11 +451,19 @@ export default function BridgePage() {
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   {selectedToken ? (
                     <>
-                      <img
-                        src={selectedToken.image || getTokenIcon(selectedToken.symbol, 'solana')}
-                        alt={selectedToken.symbol}
-                        className="w-4 h-4 sm:w-5 sm:h-5 rounded-full shrink-0 object-cover"
-                      />
+                      {selectedToken.image ? (
+                        <img
+                          src={selectedToken.image}
+                          alt={selectedToken.symbol}
+                          className="w-4 h-4 sm:w-5 sm:h-5 rounded-full shrink-0 object-cover"
+                        />
+                      ) : (
+                        <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full shrink-0 bg-gray-700 flex items-center justify-center">
+                          <span className="text-[8px] sm:text-[10px] text-gray-400 font-rajdhani font-bold">
+                            {selectedToken.symbol.charAt(0)}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex flex-col items-start">
                         <span className="font-rajdhani font-semibold text-xs sm:text-sm md:text-[15px] text-white truncate">
                           {selectedToken.symbol}
@@ -564,7 +515,6 @@ export default function BridgePage() {
                         onClick={() => {
                           setToChain(chain.key);
                           setShowToChainDropdown(false);
-                          setQuote(null);
                         }}
                         className="w-full px-3 py-2 text-left font-rajdhani text-sm sm:text-[15px] text-white hover:bg-[#262626] transition-colors flex items-center gap-2"
                       >
@@ -581,7 +531,7 @@ export default function BridgePage() {
               </div>
             </div>
 
-            {/* From/To Amount Section - Matching TradingInterface style */}
+            {/* Amount Input Section */}
             <div className="flex flex-col w-full mb-4">
               {/* From Solana Amount */}
               <div className="border border-white/12 h-[120px] sm:h-[135px] overflow-hidden relative rounded-t-xl bg-black/20">
@@ -601,7 +551,7 @@ export default function BridgePage() {
                     />
                     <div className="h-[16px] sm:h-[18px] bg-white/5 rounded-full px-2 flex items-center w-fit">
                       <span className="font-rajdhani font-medium text-[11px] sm:text-xs md:text-[13px] text-[rgba(255,255,255,0.65)]">
-                        $--
+                        ${calculateUsdValue()}
                       </span>
                     </div>
                   </div>
@@ -610,11 +560,19 @@ export default function BridgePage() {
                       <>
                         <div className="bg-[#131313] border border-[#393939] flex gap-1.5 sm:gap-2 items-center justify-center pl-1.5 sm:pl-2 pr-2 sm:pr-3 py-1.5 sm:py-2 rounded-full shadow-[0px_0px_10px_0px_rgba(255,255,255,0.04)]">
                           <div className="bg-white rounded-full p-0.5 sm:p-1 w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center overflow-hidden shrink-0">
-                            <img
-                              src={selectedToken.image || getTokenIcon(selectedToken.symbol, 'solana')}
-                              alt={selectedToken.symbol}
-                              className="w-full h-full object-cover rounded-full"
-                            />
+                            {selectedToken.image ? (
+                              <img
+                                src={selectedToken.image}
+                                alt={selectedToken.symbol}
+                                className="w-full h-full object-cover rounded-full"
+                              />
+                            ) : (
+                              <div className="w-full h-full rounded-full bg-gray-700 flex items-center justify-center">
+                                <span className="text-[8px] sm:text-[10px] text-gray-300 font-rajdhani font-bold">
+                                  {selectedToken.symbol.charAt(0)}
+                                </span>
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center gap-1">
                             <span className="font-rajdhani font-semibold text-xs sm:text-sm md:text-[15px] text-white whitespace-nowrap">
@@ -648,33 +606,45 @@ export default function BridgePage() {
                 </div>
               </div>
 
-              {/* To Amount */}
+              {/* To Amount - Shows wrapped token */}
               <div className="border-l border-r border-b border-white/12 h-[115px] sm:h-[125px] relative rounded-b-xl bg-black/20">
                 <div className="absolute inset-0 flex items-center justify-between px-3 sm:px-4 gap-2 sm:gap-4">
                   <div className="flex flex-col gap-1.5 sm:gap-2 flex-1 min-w-0">
                     <div className="font-rajdhani font-medium text-xs sm:text-sm md:text-[15px] text-[rgba(255,255,255,0.65)] uppercase">
-                      To {SUPPORTED_CHAINS[toChain].name}
+                      To {SUPPORTED_CHAINS[toChain].name} (Wrapped)
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <input
-                        type="text"
-                        value={toAmount || '0'}
-                        className="w-full text-2xl sm:text-3xl md:text-[36px] font-rajdhani font-medium bg-transparent border-none focus:ring-0 focus:outline-none text-white placeholder:text-[rgba(255,255,255,0.38)] h-auto p-0"
-                        placeholder="0"
-                        disabled
-                      />
-                      <div className="bg-[#131313] border border-[#393939] flex gap-1.5 sm:gap-2 items-center justify-center pl-1.5 sm:pl-2 pr-2 sm:pr-3 py-1.5 sm:py-2 rounded-full shadow-[0px_0px_10px_0px_rgba(255,255,255,0.04)] shrink-0">
-                        <div className="bg-white rounded-full p-0.5 sm:p-1 w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center overflow-hidden shrink-0">
-                          <img
-                            src={getChainIcon(getChainIconName(toChain))}
-                            alt={SUPPORTED_CHAINS[toChain].nativeToken}
-                            className="w-full h-full object-cover rounded-full"
-                          />
-                        </div>
-                        <span className="font-rajdhani font-semibold text-xs sm:text-sm md:text-[15px] text-white whitespace-nowrap">
-                          {SUPPORTED_CHAINS[toChain].nativeToken}
+                      {fromAmount && parseFloat(fromAmount) > 0 ? (
+                        <span className="text-2xl sm:text-3xl md:text-[36px] font-rajdhani font-medium text-white">
+                          {fromAmount}
                         </span>
-                      </div>
+                      ) : (
+                        <span className="text-2xl sm:text-3xl md:text-[36px] font-rajdhani font-medium text-[rgba(255,255,255,0.38)]">
+                          0
+                        </span>
+                      )}
+                      {selectedToken && (
+                        <div className="bg-[#131313] border border-[#393939] flex gap-1.5 sm:gap-2 items-center justify-center pl-1.5 sm:pl-2 pr-2 sm:pr-3 py-1.5 sm:py-2 rounded-full shadow-[0px_0px_10px_0px_rgba(255,255,255,0.04)] shrink-0">
+                          <div className="bg-white rounded-full p-0.5 sm:p-1 w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center overflow-hidden shrink-0">
+                            {selectedToken.image ? (
+                              <img
+                                src={selectedToken.image}
+                                alt={wrappedTokenSymbol}
+                                className="w-full h-full object-cover rounded-full"
+                              />
+                            ) : (
+                              <div className="w-full h-full rounded-full bg-gray-700 flex items-center justify-center">
+                                <span className="text-[8px] sm:text-[10px] text-gray-300 font-rajdhani font-bold">
+                                  {selectedToken.symbol.charAt(0)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <span className="font-rajdhani font-semibold text-xs sm:text-sm md:text-[15px] text-white whitespace-nowrap">
+                            {wrappedTokenSymbol}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -700,20 +670,12 @@ export default function BridgePage() {
               <div className="border-b border-gray-800 pb-2 flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="font-rajdhani font-bold text-xs sm:text-sm text-[#79767d] uppercase">
-                    Rate
+                    You Will Receive
                   </div>
                   <div className="flex items-center gap-2">
-                    {loadingQuote ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-[#d08700]" />
-                    ) : quote && fromAmount && toAmount && selectedToken ? (
-                      <div className="font-rajdhani font-bold text-sm sm:text-base md:text-[18px] text-white leading-tight sm:leading-[28px] text-right break-words flex items-center gap-2">
-                        1 {selectedToken.symbol} = {(parseFloat(toAmount) / parseFloat(fromAmount || '1')).toFixed(4)} {SUPPORTED_CHAINS[toChain].nativeToken}
-                        <button
-                          onClick={fetchQuote}
-                          className="text-gray-400 hover:text-[#d08700] transition-colors"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                        </button>
+                    {selectedToken && fromAmount && parseFloat(fromAmount) > 0 ? (
+                      <div className="font-rajdhani font-bold text-sm sm:text-base md:text-[18px] text-white leading-tight sm:leading-[28px] text-right break-words">
+                        {fromAmount} {wrappedTokenSymbol}
                       </div>
                     ) : (
                       <div className="font-rajdhani font-bold text-sm sm:text-base md:text-[18px] text-[#79767d] leading-tight sm:leading-[28px]">
@@ -729,7 +691,7 @@ export default function BridgePage() {
                   Estimated Processing Time
                 </div>
                 <div className="font-rajdhani font-bold text-sm sm:text-base md:text-[18px] text-[#79767d] leading-tight sm:leading-[28px]">
-                  ~{estimatedTime || '--'}s
+                  ~{Math.floor(estimatedTime / 60)}m
                 </div>
               </div>
             </div>
@@ -737,9 +699,9 @@ export default function BridgePage() {
             {/* Bridge Button */}
             <button
               onClick={handleBridge}
-              disabled={!connected || !selectedToken || !fromAmount || !destinationAddress || !quote || bridging || loadingQuote}
+              disabled={!connected || !selectedToken || !fromAmount || !destinationAddress || bridging}
               className={`w-full mt-6 py-3 sm:py-3.5 px-4 font-rajdhani font-bold text-sm sm:text-base rounded-lg transition-all ${
-                !connected || !selectedToken || !fromAmount || !destinationAddress || !quote || bridging || loadingQuote
+                !connected || !selectedToken || !fromAmount || !destinationAddress || bridging
                   ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
                   : 'bg-[#d08700] hover:bg-[#b87600] text-black cursor-pointer'
               }`}
@@ -754,16 +716,9 @@ export default function BridgePage() {
               ) : !selectedToken ? (
                 'Select Token to Bridge'
               ) : (
-                'Bridge Tokens'
+                `Bridge to ${wrappedTokenSymbol || 'Wrapped Token'}`
               )}
             </button>
-
-            {/* Error Messages */}
-            {quoteError && (
-              <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <p className="text-red-400 text-xs font-rajdhani">{quoteError}</p>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -783,7 +738,7 @@ export default function BridgePage() {
             <div className="p-4 sm:p-6 border-b border-gray-800">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-rajdhani font-bold text-lg sm:text-xl text-white">
-                  Select From Token
+                  Select Token to Bridge
                 </h3>
                 <button
                   onClick={() => setShowTokenModal(false)}
@@ -800,7 +755,7 @@ export default function BridgePage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <input
                   type="text"
-                  placeholder="Search by token name, token symbol or address"
+                  placeholder="Search by token name, symbol or address"
                   value={tokenSearchQuery}
                   onChange={(e) => setTokenSearchQuery(e.target.value)}
                   className="w-full bg-[#131313] border border-[#393939] rounded-lg pl-10 pr-3 py-2 sm:py-2.5 text-white font-rajdhani text-sm focus:outline-none focus:border-[#d08700] placeholder:text-gray-600"
@@ -818,11 +773,13 @@ export default function BridgePage() {
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <FileX className="w-16 h-16 text-gray-600 mb-4" />
                   <p className="text-gray-500 font-rajdhani text-sm">
-                    No tokens available
+                    {tokenSearchQuery ? 'No tokens match your search' : (connected ? 'No tokens found in your wallet' : 'No tokens available')}
                   </p>
-                  <p className="text-gray-600 font-rajdhani text-xs mt-1">
-                    {tokenSearchQuery ? 'No tokens found in your wallet' : 'Connect your wallet to see tokens'}
-                  </p>
+                  {!tokenSearchQuery && !connected && (
+                    <p className="text-gray-600 font-rajdhani text-xs mt-1">
+                      Connect your wallet to see tokens
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col gap-1">
@@ -833,17 +790,23 @@ export default function BridgePage() {
                         setSelectedToken(token);
                         setShowTokenModal(false);
                         setFromAmount('');
-                        setToAmount('');
-                        setQuote(null);
                       }}
                       className="w-full px-3 py-3 rounded-lg hover:bg-[#1a1a1a] transition-colors flex items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <img
-                          src={token.image || getTokenIcon(token.symbol, 'solana')}
-                          alt={token.symbol}
-                          className="w-8 h-8 rounded-full shrink-0 object-cover"
-                        />
+                        {token.image ? (
+                          <img
+                            src={token.image}
+                            alt={token.symbol}
+                            className="w-8 h-8 rounded-full shrink-0 object-cover"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full shrink-0 bg-gray-700 flex items-center justify-center">
+                            <span className="text-xs text-gray-300 font-rajdhani font-bold">
+                              {token.symbol.charAt(0)}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex flex-col items-start min-w-0">
                           <span className="font-rajdhani font-semibold text-sm text-white">
                             {token.symbol}
