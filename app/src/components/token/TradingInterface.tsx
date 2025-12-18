@@ -2303,8 +2303,9 @@ function TradingInterfaceComponent({ token, address }: TradingInterfaceProps) {
     return now > endTime;
   };
 
-  const shouldShowNotification = isSaleActive();
   const saleHasEnded = isSaleEnded();
+  // Only show claim period notification when sale has ended (claim period is active)
+  const shouldShowNotification = saleHasEnded;
 
   // Get unique blockchains for dropdown
   const uniqueBlockchains = getUniqueBlockchains(depositState.availableTokens);

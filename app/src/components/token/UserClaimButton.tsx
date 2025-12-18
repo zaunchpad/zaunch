@@ -131,6 +131,11 @@ export function UserClaimButton({ token, launchAddress }: UserClaimButtonProps) 
   // Check if sale has ended
   const saleEnded = Date.now() / 1000 > Number(token.endTime);
   
+  // Hide component when sale is still active - only show when claim period starts
+  if (!saleEnded) {
+    return null;
+  }
+  
   // Check if current user is the creator
   const isCreator = publicKey?.toBase58() === token.creator;
   
